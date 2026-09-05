@@ -290,6 +290,7 @@ export function App() {
           <RoadmapView
             currentUser={currentUser}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
+            onNavigatePattern={(id) => handleNavigate('patterns', id)}
           />
         )}
 

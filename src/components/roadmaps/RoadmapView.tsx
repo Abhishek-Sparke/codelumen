@@ -13,11 +13,31 @@ import {
 interface RoadmapViewProps {
   currentUser: UserProfile;
   onNavigateProblem: (problemId: string) => void;
+  onNavigatePattern?: (patternId: string) => void;
 }
+
+const SECTION_PATTERN_MAP: Record<string, string> = {
+  'sec-01': 'two-pointers',
+  'sec-02': 'two-pointers',
+  'sec-03': 'two-pointers',
+  'sec-04': 'sliding-window',
+  'sec-05': 'monotonic-stack',
+  'sec-06': 'binary-search',
+  'sec-07': 'fast-slow-pointers',
+  'sec-08': 'tree-dfs-bfs',
+  'sec-09': 'top-k-elements',
+  'sec-10': 'backtracking',
+  'sec-11': 'graph-traversal',
+  'sec-12': '0-1-knapsack',
+  'sec-13': 'two-pointers',
+  'sec-14': 'two-pointers',
+  'sec-15': 'two-pointers',
+};
 
 export const RoadmapView: React.FC<RoadmapViewProps> = ({
   currentUser,
-  onNavigateProblem
+  onNavigateProblem,
+  onNavigatePattern
 }) => {
   // Determine suggested starting stage based on authentic experience level (with 0 fake solves)
   const suggestedStartingSectionId = useMemo(() => {
@@ -198,6 +218,28 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
                 </span>
               </div>
             )}
+
+            {/* Quick Actions: Learn Pattern & Solve Next Problem */}
+            <div className="mt-4 flex flex-wrap items-center gap-3 pt-2">
+              {onNavigatePattern && (
+                <button
+                  onClick={() => onNavigatePattern(SECTION_PATTERN_MAP[selectedSection.id] || 'two-pointers')}
+                  className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Study Pattern Guide</span>
+                </button>
+              )}
+              {sectionProblems.find(sp => !sp.isSolved) && (
+                <button
+                  onClick={() => onNavigateProblem(sectionProblems.find(sp => !sp.isSolved)!.problem.id)}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-2 text-xs font-bold text-black shadow-md shadow-amber-500/20 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+                >
+                  <Zap className="h-3.5 w-3.5 fill-black" />
+                  <span>Solve: {sectionProblems.find(sp => !sp.isSolved)!.problem.title} →</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Problems in this stage */}
