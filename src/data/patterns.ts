@@ -32,7 +32,7 @@ export const PATTERNS_DATA: PatternGuide[] = [
     spaceComplexity: 'O(1) auxiliary space',
     beginnerProblemIds: ['p-1', 'p-6', 'p-18'],
     intermediateProblemIds: ['p-7', 'p-8', 'p-19'],
-    advancedProblemIds: ['p-20', 'p-35']
+    advancedProblemIds: ['p-20', 'p-35', 'p-61']
   },
   {
     id: 'sliding-window',
@@ -58,7 +58,7 @@ Shrink:      [ b  c  a ] b  c  b  b   --> Valid again (len 3)
     spaceComplexity: 'O(k) where k is character set or window size',
     beginnerProblemIds: ['p-9', 'p-10'],
     intermediateProblemIds: ['p-11', 'p-12'],
-    advancedProblemIds: ['p-13', 'p-36']
+    advancedProblemIds: ['p-13', 'p-36', 'p-60', 'p-62']
   },
   {
     id: 'monotonic-stack',
@@ -84,8 +84,8 @@ Push 75: [ 75 ]
     timeComplexity: 'O(n) amortized (each element pushed and popped once)',
     spaceComplexity: 'O(n) stack memory',
     beginnerProblemIds: ['p-14', 'p-15'],
-    intermediateProblemIds: ['p-16', 'p-17'],
-    advancedProblemIds: ['p-37']
+    intermediateProblemIds: ['p-16', 'p-17', 'p-68'],
+    advancedProblemIds: ['p-37', 'p-61', 'p-62']
   },
   {
     id: 'fast-slow-pointers',
@@ -112,7 +112,7 @@ Step 3: S=4, F=4 (Collision at node 4 -> Cycle Confirmed!)
     spaceComplexity: 'O(1) auxiliary pointer memory',
     beginnerProblemIds: ['p-21'],
     intermediateProblemIds: ['p-22'],
-    advancedProblemIds: ['p-23']
+    advancedProblemIds: ['p-23', 'p-72']
   },
   {
     id: 'binary-search',
@@ -139,8 +139,8 @@ Is condition(50) met?
     timeComplexity: 'O(log n)',
     spaceComplexity: 'O(1)',
     beginnerProblemIds: ['p-24', 'p-25'],
-    intermediateProblemIds: ['p-26', 'p-27'],
-    advancedProblemIds: ['p-28']
+    intermediateProblemIds: ['p-26', 'p-27', 'p-65'],
+    advancedProblemIds: ['p-28', 'p-73']
   },
   {
     id: 'tree-dfs-bfs',
@@ -168,8 +168,8 @@ BFS Queue: [1] -> [2, 3] -> [4, 5, 6]
     timeComplexity: 'O(n) where n is number of nodes',
     spaceComplexity: 'O(h) for DFS (height), O(w) for BFS (max width)',
     beginnerProblemIds: ['p-29', 'p-30'],
-    intermediateProblemIds: ['p-31', 'p-32'],
-    advancedProblemIds: ['p-33']
+    intermediateProblemIds: ['p-31', 'p-32', 'p-54', 'p-55'],
+    advancedProblemIds: ['p-33', 'p-71']
   },
   {
     id: 'topological-sort',
@@ -197,8 +197,8 @@ Enqueue 0 & 2 -> Process -> Unlock 1 -> Unlock 3
     timeComplexity: 'O(V + E)',
     spaceComplexity: 'O(V + E)',
     beginnerProblemIds: ['p-34'],
-    intermediateProblemIds: ['p-38', 'p-39'],
-    advancedProblemIds: ['p-40']
+    intermediateProblemIds: ['p-38', 'p-39', 'p-56', 'p-57', 'p-69', 'p-70'],
+    advancedProblemIds: ['p-40', 'p-75']
   },
   {
     id: 'dynamic-programming',
@@ -225,8 +225,8 @@ Amount 3: 3 coins (1+1+1)
     timeComplexity: 'O(number of states * transitions)',
     spaceComplexity: 'O(states) or O(1) state-reduction',
     beginnerProblemIds: ['p-41', 'p-42'],
-    intermediateProblemIds: ['p-43', 'p-44'],
-    advancedProblemIds: ['p-45', 'p-46']
+    intermediateProblemIds: ['p-43', 'p-44', 'p-53', 'p-64'],
+    advancedProblemIds: ['p-45', 'p-46', 'p-63', 'p-65']
   },
   {
     id: 'backtracking',
@@ -254,8 +254,8 @@ Choice Tree for Subsets of [1, 2]:
     timeComplexity: 'O(2^n) or O(n!)',
     spaceComplexity: 'O(n) recursion call stack depth',
     beginnerProblemIds: ['p-47'],
-    intermediateProblemIds: ['p-48'],
-    advancedProblemIds: ['p-49']
+    intermediateProblemIds: ['p-48', 'p-51', 'p-52', 'p-66'],
+    advancedProblemIds: ['p-49', 'p-74']
   },
   {
     id: 'bitwise-manipulation',
