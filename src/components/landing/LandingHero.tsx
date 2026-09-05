@@ -47,7 +47,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
   return [];
 }`;
 
-  const handleRunDemo = () => {
+  const handleRunInteractiveSample = () => {
     setIsRunning(true);
     setTimeout(() => {
       setIsRunning(false);
@@ -158,7 +158,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
                 </div>
 
                 <button
-                  onClick={handleRunDemo}
+                  onClick={handleRunInteractiveSample}
                   disabled={isRunning}
                   className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 px-3.5 py-1.5 text-xs font-semibold text-black shadow-md shadow-emerald-500/20 transition-transform active:scale-95"
                 >

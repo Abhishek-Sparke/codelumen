@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { X, ArrowRight, ShieldCheck, Sparkles, Loader2, User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { 
+  X, ArrowRight, ShieldCheck, Sparkles, Loader2, 
+  User, Mail, Lock, Eye, EyeOff, CheckCircle2, ArrowLeft, KeyRound
+} from 'lucide-react';
 import { UserProfile } from '../../types';
 import { CodeSparkLogo } from '../brand/CodeSparkLogo';
 import { StorageService } from '../../services/storage';
@@ -7,9 +10,8 @@ import { StorageService } from '../../services/storage';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (user: Partial<UserProfile>) => void;
-  onOpenOnboarding: () => void;
-  initialMode?: 'login' | 'signup';
+  onSuccess: (user: UserProfile, isNewUser: boolean) => void;
+  initialMode?: 'login' | 'signup' | 'forgot';
   isFullScreen?: boolean;
   onNavigateHome?: () => void;
 }
@@ -18,36 +20,118 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  onOpenOnboarding,
   initialMode = 'login',
   isFullScreen = false,
   onNavigateHome
 }) => {
-  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [showGoogleChooser, setShowGoogleChooser] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(initialMode);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Form fields
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Field validation touched states
+  const [usernameError, setUsernameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   if (!isOpen && !isFullScreen) return null;
 
-  const handleModeSwitch = (newMode: 'login' | 'signup') => {
+  const handleModeSwitch = (newMode: 'login' | 'signup' | 'forgot') => {
     setMode(newMode);
     setAuthError('');
+    setSuccessMessage('');
+    setUsernameError('');
+    setEmailError('');
+    setPasswordError('');
+    setConfirmPasswordError('');
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  // Section 5: Real-time username validation
+  const handleUsernameChange = (val: string) => {
+    const clean = val.toLowerCase().trim();
+    setUsername(clean);
+    if (!clean) {
+      setUsernameError('Username is required.');
+    } else if (clean.length < 3) {
+      setUsernameError('Username must be at least 3 characters.');
+    } else if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+      setUsernameError('Allowed characters: letters, numbers, and underscores.');
+    } else if (!StorageService.checkUsernameAvailable(clean)) {
+      setUsernameError('Username is already taken.');
+    } else {
+      setUsernameError('');
+    }
+  };
+
+  // Section 5: Real-time email validation
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    const clean = val.trim();
+    if (!clean) {
+      setEmailError('Email is required.');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+      setEmailError('Enter a valid email address.');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  // Section 5: Real-time password validation
+  const handlePasswordChange = (val: string) => {
+    setPassword(val);
+    if (mode === 'signup') {
+      if (!val) {
+        setPasswordError('Password is required.');
+      } else if (val.length < 8) {
+        setPasswordError('Password must be at least 8 characters.');
+      } else {
+        setPasswordError('');
+      }
+      if (confirmPassword && val !== confirmPassword) {
+        setConfirmPasswordError("Passwords don't match.");
+      } else if (confirmPassword && val === confirmPassword) {
+        setConfirmPasswordError('');
+      }
+    }
+  };
+
+  const handleConfirmPasswordChange = (val: string) => {
+    setConfirmPassword(val);
+    if (val !== password) {
+      setConfirmPasswordError("Passwords don't match.");
+    } else {
+      setConfirmPasswordError('');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    setSuccessMessage('');
+
+    if (mode === 'forgot') {
+      if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setEmailError('Enter a valid email address.');
+        return;
+      }
+      setIsSubmitting(true);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        const res = StorageService.sendPasswordResetEmail(email.trim());
+        setSuccessMessage(res.message);
+      }, 500);
+      return;
+    }
 
     if (mode === 'signup') {
       if (!name.trim()) {
@@ -55,394 +139,490 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
       if (!username.trim() || username.length < 3) {
-        setAuthError('Username must be at least 3 characters long.');
+        setUsernameError('Username must be at least 3 characters.');
         return;
       }
-      if (!email.trim() || !email.includes('@')) {
-        setAuthError('Please enter a valid email address.');
+      if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+        setUsernameError('Allowed characters: letters, numbers, and underscores.');
         return;
       }
-      if (!password || password.length < 6) {
-        setAuthError('Password must be at least 6 characters.');
+      if (!StorageService.checkUsernameAvailable(username.trim())) {
+        setUsernameError('Username is already taken.');
+        return;
+      }
+      if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setEmailError('Enter a valid email address.');
+        return;
+      }
+      if (!password || password.length < 8) {
+        setPasswordError('Password must be at least 8 characters.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setConfirmPasswordError("Passwords don't match.");
         return;
       }
 
-      setIsConnecting(true);
-      setTimeout(() => {
-        setIsConnecting(false);
-        const res = StorageService.registerUser({
+      setIsSubmitting(true);
+      try {
+        const res = await StorageService.registerUser({
           name: name.trim(),
           username: username.trim().toLowerCase(),
           email: email.trim().toLowerCase(),
           password
         });
 
+        setIsSubmitting(false);
         if (!res.success || !res.user) {
-          setAuthError(res.error || 'Failed to create account.');
+          setAuthError(res.error || 'Failed to create account. Please try again.');
           return;
         }
 
-        onSuccess(res.user);
+        onSuccess(res.user, true);
         if (!isFullScreen) onClose();
-        onOpenOnboarding();
-      }, 350);
+      } catch (err) {
+        setIsSubmitting(false);
+        setAuthError('An unexpected error occurred. Please try again.');
+      }
     } else {
       // Login
       if (!email.trim()) {
-        setAuthError('Please enter your email or username.');
+        setEmailError('Please enter your email or username.');
         return;
       }
       if (!password) {
-        setAuthError('Please enter your password.');
+        setPasswordError('Please enter your password.');
         return;
       }
 
-      setIsConnecting(true);
-      setTimeout(() => {
-        setIsConnecting(false);
-        const res = StorageService.loginUser(email.trim(), password);
+      setIsSubmitting(true);
+      try {
+        const res = await StorageService.loginUser(email.trim(), password);
+        setIsSubmitting(false);
+
         if (!res.success || !res.user) {
-          setAuthError(res.error || 'Invalid credentials.');
+          setAuthError(res.error || 'Incorrect email or password. Please check your credentials and try again.');
           return;
         }
 
-        onSuccess(res.user);
+        onSuccess(res.user, false);
         if (!isFullScreen) onClose();
-        if (!res.user.onboarding_completed) {
-          onOpenOnboarding();
-        }
-      }, 350);
+      } catch (err) {
+        setIsSubmitting(false);
+        setAuthError('An unexpected error occurred. Please try again.');
+      }
     }
   };
 
-  const handleStartGoogleAuth = () => {
-    setAuthError('');
-    setIsConnecting(true);
-    setTimeout(() => {
-      setIsConnecting(false);
-      setShowGoogleChooser(true);
-    }, 400);
-  };
-
-  const handleSelectGoogleAccount = (account: { name: string; email: string; avatar?: string }) => {
-    setShowGoogleChooser(false);
-    setIsConnecting(true);
-
-    setTimeout(() => {
-      setIsConnecting(false);
-      const username = account.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-      
-      const res = StorageService.loginUser(account.email);
-      let userObj: Partial<UserProfile>;
-      let isNew = false;
-
-      if (res.success && res.user) {
-        userObj = res.user;
-      } else {
-        const reg = StorageService.registerUser({
-          name: account.name,
-          username,
-          email: account.email,
-          avatar: account.avatar
-        });
-        userObj = reg.user || {
-          email: account.email,
-          name: account.name,
-          username,
-          avatar: account.avatar,
-          onboarding_completed: false
-        };
-        isNew = true;
-      }
-
-      onSuccess(userObj);
-
-      if (!isFullScreen) {
-        onClose();
-      }
-
-      if (isNew || !userObj.onboarding_completed) {
-        onOpenOnboarding();
-      }
-    }, 400);
-  };
-
-  const handleCustomGoogleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customGoogleEmail.includes('@')) {
-      setAuthError('Please enter a valid Google email address.');
-      return;
-    }
-    const derivedName = customGoogleName || customGoogleEmail.split('@')[0];
-    handleSelectGoogleAccount({
-      name: derivedName,
-      email: customGoogleEmail,
-      avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`
-    });
-  };
-
-  const content = (
-    <div className="w-full max-w-[500px] mx-auto text-left">
-      {/* Header when rendered in full screen */}
-      {isFullScreen && (
-        <header className="mb-8 flex items-center justify-between border-b border-white/[0.08] pb-5">
-          <div className="flex items-center gap-3">
-            <CodeSparkLogo size="sm" animate={true} />
-          </div>
-          {onNavigateHome && (
-            <button
-              onClick={onNavigateHome}
-              className="text-xs font-semibold text-white/60 hover:text-white transition-colors"
-            >
-              ← Back to home
-            </button>
-          )}
-        </header>
-      )}
-
-      {/* Hero Tagline */}
-      <p className="mb-6 text-center text-sm sm:text-base font-bold text-white/90">
-        Master Algorithms. <span className="text-amber-400">One Problem at a Time.</span>
-      </p>
-
-      {/* Main Auth Card */}
+  // Section 23: 2-Column Desktop Layout / Centered Mobile Layout
+  const authFormCard = (
+    <div className="w-full max-w-md mx-auto">
       <div className="overflow-hidden rounded-3xl border border-white/[0.12] bg-[#0c0c11] shadow-[0_25px_80px_-15px_rgba(0,0,0,0.9)]">
-        {/* Auth Switch Tabs (Sign In / Sign Up) */}
-        <nav className="grid grid-cols-2 p-1.5 gap-1.5 border-b border-white/[0.08] bg-white/[0.02]" aria-label="Account access">
-          <button
-            type="button"
-            onClick={() => handleModeSwitch('login')}
-            className={`flex items-center justify-center py-3 text-xs sm:text-sm font-bold rounded-2xl transition-all ${
-              mode === 'login'
-                ? 'bg-white/[0.08] text-white shadow-sm border border-white/[0.1]'
-                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
-            }`}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeSwitch('signup')}
-            className={`flex items-center justify-center py-3 text-xs sm:text-sm font-bold rounded-2xl transition-all ${
-              mode === 'signup'
-                ? 'bg-white/[0.08] text-white shadow-sm border border-white/[0.1]'
-                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
-            }`}
-          >
-            Sign up
-          </button>
-        </nav>
+        
+        {/* Navigation Switch Tabs (Login / Signup) */}
+        {mode !== 'forgot' && (
+          <nav className="grid grid-cols-2 p-1.5 gap-1.5 border-b border-white/[0.08] bg-white/[0.02]" aria-label="Account access">
+            <button
+              type="button"
+              onClick={() => handleModeSwitch('login')}
+              className={`flex items-center justify-center py-3 text-xs sm:text-sm font-bold rounded-2xl transition-all ${
+                mode === 'login'
+                  ? 'bg-white/[0.08] text-white shadow-sm border border-white/[0.1]'
+                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
+              }`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeSwitch('signup')}
+              className={`flex items-center justify-center py-3 text-xs sm:text-sm font-bold rounded-2xl transition-all ${
+                mode === 'signup'
+                  ? 'bg-white/[0.08] text-white shadow-sm border border-white/[0.1]'
+                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
+              }`}
+            >
+              Sign up
+            </button>
+          </nav>
+        )}
 
-        {/* Card Content */}
         <div className="p-6 sm:p-8">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-400/90">
-            {mode === 'signup' ? 'JOIN THE COMMUNITY' : 'WELCOME BACK'}
-          </p>
+          {/* Section 2 & 4 Headings */}
+          {mode === 'login' && (
+            <>
+              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-1.5">
+                Welcome back to CodeSpark ⚡
+              </h1>
+              <p className="text-xs sm:text-sm text-white/60 mb-6 leading-relaxed">
+                Continue your coding journey.
+              </p>
+            </>
+          )}
 
-          <h1 className="mb-2 font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            {mode === 'signup' ? 'Create your account' : 'Sign in to CodeSpark'}
-          </h1>
+          {mode === 'signup' && (
+            <>
+              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-1.5">
+                Start your CodeSpark journey ⚡
+              </h1>
+              <p className="text-xs sm:text-sm text-white/60 mb-6 leading-relaxed">
+                Create your account and start building your coding skills.
+              </p>
+            </>
+          )}
 
-          <p className="mb-6 text-xs sm:text-sm leading-relaxed text-white/60">
-            {mode === 'signup'
-              ? 'Master data structures and algorithms with deliberate practice, visual testcases, and an intelligent AI coach.'
-              : 'Your problems, your coding streaks, and your next algorithmic breakthrough. Pick up where you left off.'}
-          </p>
+          {mode === 'forgot' && (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('login')}
+                  className="rounded-full p-1 text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Back to login"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-semibold text-white/50">Return to Log In</span>
+              </div>
+              <h1 className="font-display text-2xl font-extrabold tracking-tight text-white mb-1.5">
+                Reset your password
+              </h1>
+              <p className="text-xs text-white/60 mb-6 leading-relaxed">
+                Enter your registered email address and we&apos;ll send you instructions to reset your password.
+              </p>
+            </>
+          )}
 
+          {/* Error Message Display */}
           {authError && (
-            <div className="mb-5 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
-              {authError}
+            <div className="mb-5 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3.5 text-xs text-rose-300 flex items-start gap-2">
+              <span className="font-bold">Error:</span>
+              <span>{authError}</span>
             </div>
           )}
 
-          {/* Email / Password Form */}
-          <form onSubmit={handleFormSubmit} className="space-y-3.5 mb-5">
+          {/* Success Message Display */}
+          {successMessage && (
+            <div className="mb-5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3.5 text-xs text-emerald-300 flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* SIGNUP FIELDS */}
             {mode === 'signup' && (
               <>
+                {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-semibold text-white/70 mb-1">Full Name</label>
+                  <label className="block text-xs font-semibold text-white/70 mb-1">
+                    Full Name <span className="text-amber-400">*</span>
+                  </label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                     <input
                       type="text"
+                      required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Alex Developer"
+                      placeholder="Alex Taylor"
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
                     />
                   </div>
                 </div>
 
+                {/* Username */}
                 <div>
-                  <label className="block text-xs font-semibold text-white/70 mb-1">Username</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-semibold text-white/70">
+                      Username <span className="text-amber-400">*</span>
+                    </label>
+                    {usernameError && (
+                      <span className="text-[11px] text-rose-400 font-medium">{usernameError}</span>
+                    )}
+                  </div>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-white/40">@</span>
                     <input
                       type="text"
+                      required
                       value={username}
-                      onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                      placeholder="alex_dev"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
+                      onChange={(e) => handleUsernameChange(e.target.value)}
+                      placeholder="alex_taylor"
+                      className={`w-full rounded-xl border bg-white/[0.04] pl-9 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none ${
+                        usernameError ? 'border-rose-500/50' : 'border-white/10 focus:border-amber-400'
+                      }`}
                     />
                   </div>
                 </div>
               </>
             )}
 
+            {/* Email Address */}
             <div>
-              <label className="block text-xs font-semibold text-white/70 mb-1">
-                {mode === 'signup' ? 'Email Address' : 'Email or Username'}
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs font-semibold text-white/70">
+                  {mode === 'signup' || mode === 'forgot' ? 'Email Address' : 'Email or Username'} <span className="text-amber-400">*</span>
+                </label>
+                {emailError && (
+                  <span className="text-[11px] text-rose-400 font-medium">{emailError}</span>
+                )}
+              </div>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
                 <input
-                  type={mode === 'signup' ? 'email' : 'text'}
+                  type={mode === 'signup' || mode === 'forgot' ? 'email' : 'text'}
+                  required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={mode === 'signup' ? 'alex@example.com' : 'alex@example.com or @alex_dev'}
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
+                  onChange={(e) => handleEmailChange(e.target.value)}
+                  placeholder={mode === 'signup' || mode === 'forgot' ? 'alex@example.com' : 'alex@example.com or @alex_taylor'}
+                  className={`w-full rounded-xl border bg-white/[0.04] pl-10 pr-4 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none ${
+                    emailError ? 'border-rose-500/50' : 'border-white/10 focus:border-amber-400'
+                  }`}
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-white/70 mb-1">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-10 py-2.5 text-xs text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {/* Password (for Login and Signup) */}
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-white/70">
+                    Password <span className="text-amber-400">*</span>
+                  </label>
+                  {mode === 'login' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleModeSwitch('forgot')}
+                      className="text-[11px] font-medium text-amber-400/90 hover:text-amber-300 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  ) : (
+                    passwordError && (
+                      <span className="text-[11px] text-rose-400 font-medium">{passwordError}</span>
+                    )
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => handlePasswordChange(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full rounded-xl border bg-white/[0.04] pl-10 pr-10 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none ${
+                      passwordError ? 'border-rose-500/50' : 'border-white/10 focus:border-amber-400'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 p-1"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
+            {/* Confirm Password (for Signup) */}
+            {mode === 'signup' && (
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-white/70">
+                    Confirm Password <span className="text-amber-400">*</span>
+                  </label>
+                  {confirmPasswordError && (
+                    <span className="text-[11px] text-rose-400 font-medium">{confirmPasswordError}</span>
+                  )}
+                </div>
+                <div className="relative">
+                  <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full rounded-xl border bg-white/[0.04] pl-10 pr-10 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none ${
+                      confirmPasswordError ? 'border-rose-500/50' : 'border-white/10 focus:border-amber-400'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 p-1"
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Primary Action Button with Section 21 loading states */}
             <button
               type="submit"
-              disabled={isConnecting}
-              className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-lg shadow-amber-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-70"
+              disabled={isSubmitting}
+              className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-lg shadow-amber-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isConnecting ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin text-black" />
-                  <span>Processing…</span>
+                  <span>
+                    {mode === 'signup' ? 'Creating account...' : mode === 'forgot' ? 'Sending reset link...' : 'Logging in...'}
+                  </span>
                 </>
               ) : (
                 <>
-                  <span>{mode === 'signup' ? 'Create Free Account' : 'Sign In'}</span>
-                  <ArrowRight className="h-4 w-4" />
+                  <span>
+                    {mode === 'signup' ? 'Create Account →' : mode === 'forgot' ? 'Send Reset Link →' : 'Log In →'}
+                  </span>
                 </>
               )}
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/[0.08]" />
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase">
-              <span className="bg-[#0c0c11] px-2 text-white/40 font-semibold tracking-wider">or</span>
-            </div>
-          </div>
-
-          {/* Google Auth Button */}
-          <button
-            type="button"
-            onClick={handleStartGoogleAuth}
-            disabled={isConnecting}
-            className="group relative flex w-full items-center justify-center gap-3 rounded-xl border border-white/[0.14] bg-white hover:bg-slate-100 px-5 py-3 text-xs font-bold text-gray-900 shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-75 disabled:cursor-wait"
-          >
-            {/* Official Google G Icon */}
-            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.37 7.32 24 12 24z" />
-              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z" />
-              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.32 0 3.25 2.63 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-            </svg>
-            <span>Continue with Google</span>
-          </button>
-
-          {/* Security Reassurance */}
-          <p className="mt-3.5 mb-4 text-center text-[11px] text-white/50 flex items-center justify-center gap-1.5">
+          {/* Section 6 & 24 Security badge */}
+          <p className="mt-5 text-center text-[11px] text-white/45 flex items-center justify-center gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Secure 256-bit encrypted authentication</span>
+            <span>Encrypted with client-side SHA-256 cryptographic security</span>
           </p>
 
-          {/* Alternate Switcher */}
-          <p className="mt-4 text-center text-xs text-white/50">
-            {mode === 'signup' ? 'Already have an account?' : 'Don’t have an account?'}{' '}
-            <button
-              type="button"
-              onClick={() => handleModeSwitch(mode === 'signup' ? 'login' : 'signup')}
-              className="font-bold text-amber-400 hover:text-amber-300 underline underline-offset-4 ml-1"
-            >
-              {mode === 'signup' ? 'Sign in' : 'Sign up'}
-            </button>
-          </p>
+          {/* Bottom Switcher */}
+          <div className="mt-5 pt-4 border-t border-white/[0.08] text-center text-xs text-white/55">
+            {mode === 'signup' ? (
+              <p>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('login')}
+                  className="font-bold text-amber-400 hover:text-amber-300 underline underline-offset-4 ml-1"
+                >
+                  Log in
+                </button>
+              </p>
+            ) : mode === 'login' ? (
+              <p>
+                Don&apos;t have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('signup')}
+                  className="font-bold text-amber-400 hover:text-amber-300 underline underline-offset-4 ml-1"
+                >
+                  Create an account
+                </button>
+              </p>
+            ) : (
+              <p>
+                Remember your password?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('login')}
+                  className="font-bold text-amber-400 hover:text-amber-300 underline underline-offset-4 ml-1"
+                >
+                  Back to Log In
+                </button>
+              </p>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Footer Browse link */}
-      <p className="mt-5 text-center text-xs text-white/45">
-        Just exploring?{' '}
-        <button
-          onClick={() => {
-            if (onClose) onClose();
-            if (onNavigateHome) onNavigateHome();
-          }}
-          className="font-semibold text-white/70 hover:text-white underline underline-offset-4"
-        >
-          Explore problems & algorithms →
-        </button>
-      </p>
     </div>
   );
 
-  // If used as full page screen
+  // Section 23: 2-Column Desktop Layout
+  const fullContent = (
+    <div className="w-full max-w-5xl mx-auto px-4 py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        
+        {/* Left Column (Desktop branding & marketing) */}
+        <div className="lg:col-span-6 flex flex-col justify-center text-center lg:text-left">
+          <div className="flex items-center justify-center lg:justify-start gap-3 mb-6">
+            <CodeSparkLogo size="md" animate={true} />
+          </div>
+
+          <h2 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-[1.15] mb-4">
+            Ignite your <br />
+            <span className="bg-gradient-to-r from-amber-200 via-amber-400 to-amber-100 bg-clip-text text-transparent">
+              coding skills.
+            </span>
+          </h2>
+
+          <p className="text-sm sm:text-base font-medium text-amber-300/80 mb-6">
+            &ldquo;Learn. Practice. Solve.&rdquo;
+          </p>
+
+          <p className="text-xs sm:text-sm leading-relaxed text-white/60 max-w-lg mb-8">
+            CodeSpark delivers deliberate algorithmic practice. Master patterns, receive Socratic AI guidance, and track your daily streak with genuine earned milestones.
+          </p>
+
+          <div className="hidden lg:flex flex-col gap-3.5 border-t border-white/[0.08] pt-6">
+            <div className="flex items-center gap-3 text-xs text-white/70">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400/10 text-amber-400">
+                <Sparkles className="h-3.5 w-3.5" />
+              </div>
+              <span>Structured curriculum roadmaps tailored to your target</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-white/70">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-400/10 text-cyan-400">
+                <ShieldCheck className="h-3.5 w-3.5" />
+              </div>
+              <span>Zero fake statistics — every point and streak is earned</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (Authentication card) */}
+        <div className="lg:col-span-6 flex justify-center">
+          {authFormCard}
+        </div>
+
+      </div>
+    </div>
+  );
+
+  // Full Screen view
   if (isFullScreen) {
     return (
-      <main className="min-h-screen bg-[#09090c] text-white py-12 px-4 flex items-center justify-center">
-        {content}
+      <main className="min-h-screen bg-[#09090c] text-white flex flex-col justify-center items-center py-12 relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="pointer-events-none absolute left-1/4 top-1/4 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-cyan-500/10 blur-[120px]" />
+        <div className="pointer-events-none absolute right-1/4 bottom-1/4 translate-x-1/2 translate-y-1/2 h-96 w-96 rounded-full bg-amber-500/10 blur-[120px]" />
 
-        {/* Google OAuth Account Chooser Modal */}
-        {showGoogleChooser && (
-          <GoogleAccountChooserModal
-            onClose={() => setShowGoogleChooser(false)}
-            onSelectAccount={handleSelectGoogleAccount}
-            customName={customGoogleName}
-            setCustomName={setCustomGoogleName}
-            customEmail={customGoogleEmail}
-            setCustomEmail={setCustomGoogleEmail}
-            showCustomInput={showCustomInput}
-            setShowCustomInput={setShowCustomInput}
-            onCustomSubmit={handleCustomGoogleSubmit}
-          />
-        )}
+        {/* Top bar with back to home */}
+        <div className="w-full max-w-5xl px-4 flex items-center justify-between mb-4">
+          <div className="lg:hidden">
+            <CodeSparkLogo size="sm" animate={true} />
+          </div>
+          {onNavigateHome && (
+            <button
+              onClick={onNavigateHome}
+              className="text-xs font-semibold text-white/60 hover:text-white transition-colors ml-auto"
+            >
+              ← Back to home
+            </button>
+          )}
+        </div>
+
+        {fullContent}
       </main>
     );
   }
 
-  // Modal dialog overlay
+  // Modal Dialog view
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-[480px] text-center"
+        className="relative w-full max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute -top-3 -right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-all shadow-md"
@@ -451,179 +631,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <X className="h-4 w-4" />
         </button>
 
-        {content}
-      </div>
-
-      {/* Google OAuth Account Chooser Modal */}
-      {showGoogleChooser && (
-        <GoogleAccountChooserModal
-          onClose={() => setShowGoogleChooser(false)}
-          onSelectAccount={handleSelectGoogleAccount}
-          customName={customGoogleName}
-          setCustomName={setCustomGoogleName}
-          customEmail={customGoogleEmail}
-          setCustomEmail={setCustomGoogleEmail}
-          showCustomInput={showCustomInput}
-          setShowCustomInput={setShowCustomInput}
-          onCustomSubmit={handleCustomGoogleSubmit}
-        />
-      )}
-    </div>
-  );
-};
-
-// =============================================================================
-// GOOGLE ACCOUNT CHOOSER (SIMULATED OAUTH MODAL)
-// =============================================================================
-interface GoogleChooserProps {
-  onClose: () => void;
-  onSelectAccount: (account: { name: string; email: string; avatar?: string }) => void;
-  customName: string;
-  setCustomName: (v: string) => void;
-  customEmail: string;
-  setCustomEmail: (v: string) => void;
-  showCustomInput: boolean;
-  setShowCustomInput: (v: boolean) => void;
-  onCustomSubmit: (e: React.FormEvent) => void;
-}
-
-const GoogleAccountChooserModal: React.FC<GoogleChooserProps> = ({
-  onClose,
-  onSelectAccount,
-  customName,
-  setCustomName,
-  customEmail,
-  setCustomEmail,
-  showCustomInput,
-  setShowCustomInput,
-  onCustomSubmit
-}) => {
-  return (
-    <div 
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div 
-        className="w-full max-w-sm rounded-2xl border border-white/20 bg-[#121218] p-6 text-left shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-          <div className="flex items-center gap-2.5">
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.37 7.32 24 12 24z" />
-              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z" />
-              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.32 0 3.25 2.63 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-            </svg>
-            <span className="text-sm font-semibold text-white/90">Sign in with Google</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-full p-1 text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <h3 className="text-lg font-bold text-white mb-1">Choose an account</h3>
-        <p className="text-xs text-white/50 mb-5">to continue to <span className="text-amber-400 font-semibold">CodeSpark</span></p>
-
-        {/* Google Accounts */}
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => onSelectAccount({
-              name: 'Abhishek Sparke',
-              email: 'abhishek.sparke@gmail.com',
-              avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
-            })}
-            className="flex w-full items-center gap-3.5 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition-all hover:bg-white/[0.08] hover:border-amber-400/40"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 font-bold text-black text-sm">
-              AS
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">Abhishek Sparke</p>
-              <p className="text-[11px] text-white/50 truncate">abhishek.sparke@gmail.com</p>
-            </div>
-            <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-              Active
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSelectAccount({
-              name: 'Ada Okonkwo',
-              email: 'ada.okonkwo@gmail.com',
-              avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-            })}
-            className="flex w-full items-center gap-3.5 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition-all hover:bg-white/[0.08] hover:border-amber-400/40"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500 font-bold text-black text-sm">
-              AO
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">Ada Okonkwo</p>
-              <p className="text-[11px] text-white/50 truncate">ada.okonkwo@gmail.com</p>
-            </div>
-          </button>
-
-          {/* Use another Google account toggle */}
-          {!showCustomInput ? (
-            <button
-              type="button"
-              onClick={() => setShowCustomInput(true)}
-              className="flex w-full items-center gap-3.5 rounded-xl border border-dashed border-white/15 p-3 text-left transition-all hover:bg-white/[0.03] text-white/70 hover:text-white"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/60">
-                <User className="h-4 w-4" />
-              </div>
-              <span className="text-xs font-medium">Use another Google account</span>
-            </button>
-          ) : (
-            <form onSubmit={onCustomSubmit} className="mt-3 rounded-xl border border-white/15 bg-white/[0.02] p-3 space-y-2.5">
-              <p className="text-[11px] font-semibold text-white/80">Enter Google Account Details</p>
-              <input
-                type="text"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                placeholder="Full Name (e.g. Linus Torvalds)"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-amber-400"
-              />
-              <input
-                type="email"
-                required
-                value={customEmail}
-                onChange={(e) => setCustomEmail(e.target.value)}
-                placeholder="your.email@gmail.com"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-amber-400"
-              />
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowCustomInput(false)}
-                  className="px-3 py-1.5 text-xs text-white/50 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-amber-400 px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-amber-300 transition-colors"
-                >
-                  Continue with this Account
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Permissions disclosure */}
-        <p className="mt-5 text-[10px] text-white/40 leading-relaxed">
-          To continue, Google will share your name, email address, language preference, and profile picture with CodeSpark. See CodeSpark’s{' '}
-          <span className="text-amber-400 underline">Privacy Policy</span> and{' '}
-          <span className="text-amber-400 underline">Terms of Service</span>.
-        </p>
+        {authFormCard}
       </div>
     </div>
   );

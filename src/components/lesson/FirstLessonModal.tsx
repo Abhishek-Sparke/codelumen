@@ -23,11 +23,11 @@ export const FirstLessonModal: React.FC<FirstLessonModalProps> = ({
   // 1: Concept
   // 2: Explanation
   // 3: Example
-  // 4: Interactive Demo
+  // 4: Interactive Visualizer
   // 5: Mini Quiz
   // 6: Practice (Ready for First Problem)
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
-  const [demoStep, setDemoStep] = useState<number>(0);
+  const [visualizerStep, setVisualizerStep] = useState<number>(0);
   const [selectedQuizAnswer, setSelectedQuizAnswer] = useState<number | null>(null);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
@@ -120,8 +120,8 @@ pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {
 }`
   };
 
-  // Interactive Demo State
-  const demoData = [
+  // Interactive Visualizer State
+  const visualizerData = [
     { i: 0, val: 2, comp: 7, seen: {}, note: 'Target is 9. Check 9 - 2 = 7. Not seen yet. Store { 2: 0 }.' },
     { i: 1, val: 7, comp: 2, seen: { 2: 0 }, note: 'Target is 9. Check 9 - 7 = 2. Found 2 in seen at index 0! Solved!' }
   ];
@@ -312,7 +312,7 @@ pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {
                 onClick={() => setStep(4)}
                 className="w-2/3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-3 text-xs font-semibold text-black shadow-lg shadow-amber-500/20"
               >
-                <span>Try Interactive Demo</span>
+                <span>Try Interactive Visualizer</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -320,7 +320,7 @@ pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {
         )}
 
         {/* ========================================================================= */}
-        {/* STEP 4: INTERACTIVE DEMO */}
+        {/* STEP 4: INTERACTIVE VISUALIZER */}
         {/* ========================================================================= */}
         {step === 4 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-150">
@@ -343,9 +343,9 @@ pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {
                   <div
                     key={idx}
                     className={`flex-1 rounded-xl p-3 text-center border transition-all ${
-                      idx === demoStep 
+                      idx === visualizerStep 
                         ? 'border-amber-400 bg-amber-500/20 text-white ring-2 ring-amber-400/40' 
-                        : idx < demoStep 
+                        : idx < visualizerStep 
                         ? 'border-white/10 bg-white/5 text-white/40' 
                         : 'border-white/10 bg-white/[0.02] text-white/60'
                     }`}
@@ -362,21 +362,21 @@ pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {
                   Hash Map (`seen`) State
                 </span>
                 <div className="font-mono text-amber-300">
-                  {demoStep === 0 ? '{} (Empty)' : '{ 2: 0 }'}
+                  {visualizerStep === 0 ? '{} (Empty)' : '{ 2: 0 }'}
                 </div>
               </div>
 
               {/* Current Step Description */}
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-200">
-                {demoData[demoStep]?.note}
+                {visualizerData[visualizerStep]?.note}
               </div>
 
               <div className="flex justify-end">
                 <button
-                  onClick={() => setDemoStep(prev => (prev === 0 ? 1 : 0))}
+                  onClick={() => setVisualizerStep(prev => (prev === 0 ? 1 : 0))}
                   className="rounded-lg bg-white/10 hover:bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
                 >
-                  {demoStep === 0 ? 'Next Iteration (i=1) →' : 'Restart Demo ↺'}
+                  {visualizerStep === 0 ? 'Next Iteration (i=1) →' : 'Restart Visualizer ↺'}
                 </button>
               </div>
             </div>

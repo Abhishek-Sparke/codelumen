@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, Problem } from './types';
+import { UserProfile } from './types';
 import { StorageService } from './services/storage';
 import { ALL_PROBLEMS } from './data/problems';
 
@@ -28,19 +28,28 @@ import { FirstLessonModal } from './components/lesson/FirstLessonModal';
 import { SkillAssessmentModal } from './components/assessment/SkillAssessmentModal';
 
 export function App() {
-  const [currentView, setCurrentView] = useState<string>('landing');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => StorageService.getCurrentUser());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => StorageService.isAuthenticated());
+  const [currentView, setCurrentView] = useState<string>(() => {
+    const user = StorageService.getCurrentUser();
+    if (user && user.onboarding_completed) return 'dashboard';
+    if (user && !user.onboarding_completed) return 'dashboard'; // will trigger onboarding modal
+    return 'landing';
+  });
+
   const [activeProblemId, setActiveProblemId] = useState<string>('p-1');
-  const [activeProfileUserId, setActiveProfileUserId] = useState<string>('user-current');
+  const [activeProfileUserId, setActiveProfileUserId] = useState<string>('');
   const [activePatternId, setActivePatternId] = useState<string>('two-pointers');
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
-  const [currentUser, setCurrentUser] = useState<UserProfile>(StorageService.getCurrentUser());
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(StorageService.isAuthenticated());
-  const [notifications, setNotifications] = useState(StorageService.getNotifications());
+  const [notifications, setNotifications] = useState(() => StorageService.getNotifications());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup' | 'forgot'>('login');
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
+    const user = StorageService.getCurrentUser();
+    return !!(user && !user.onboarding_completed);
+  });
   const [isFirstLessonOpen, setIsFirstLessonOpen] = useState(false);
   const [isAssessmentOpen, setIsAssessmentOpen] = useState(false);
 
@@ -48,9 +57,25 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView, activeProblemId]);
 
+  // Section 12: Protected Routes list
+  const protectedViews = [
+    'dashboard', 'problems', 'workspace', 'roadmaps', 
+    'patterns', 'profile', 'settings', 'submissions', 
+    'contests', 'discuss', 'leaderboard', 'admin'
+  ];
+
+  // Route protection watcher
+  useEffect(() => {
+    if (!isLoggedIn && protectedViews.includes(currentView)) {
+      setCurrentView('landing');
+      handleOpenAuth('login');
+    }
+  }, [isLoggedIn, currentView]);
+
   // Global navigation handler
   const handleNavigate = (view: string, param?: string) => {
-    if ((view === 'dashboard' || view === 'settings') && !isLoggedIn) {
+    // Section 12: Redirect unauthenticated users to login
+    if (protectedViews.includes(view) && !isLoggedIn) {
       handleOpenAuth('login');
       return;
     }
@@ -60,7 +85,7 @@ export function App() {
       setCurrentView('workspace');
     } else if (view === 'profile') {
       if (param) setActiveProfileUserId(param);
-      else setActiveProfileUserId(currentUser.id);
+      else if (currentUser) setActiveProfileUserId(currentUser.id);
       setCurrentView('profile');
     } else if (view === 'patterns') {
       if (param) setActivePatternId(param);
@@ -74,38 +99,39 @@ export function App() {
     }
   };
 
-  const handleOpenAuth = (mode: 'login' | 'signup' = 'login') => {
+  const handleOpenAuth = (mode: 'login' | 'signup' | 'forgot' = 'login') => {
     setAuthInitialMode(mode);
     setIsAuthOpen(true);
   };
 
+  // Section 11: Clean logout flow
   const handleLogout = () => {
     StorageService.logout();
+    setCurrentUser(null);
     setIsLoggedIn(false);
-    if (currentView === 'dashboard' || currentView === 'settings') {
-      setCurrentView('landing');
-    }
+    setIsOnboardingOpen(false);
+    setCurrentView('landing');
     setNotifications([
       {
         id: 'logout-' + Date.now(),
         title: 'Logged Out',
-        message: 'You have safely signed out of CodeSpark. Your solved problems and progress remain saved.',
-        type: 'badge',
+        message: 'You have safely signed out of CodeSpark.',
+        type: 'streak',
         read: false,
         timestamp: 'Just now'
-      },
-      ...notifications
+      }
     ]);
   };
 
   const handleSolveProblem = (problemId: string, xpReward: number) => {
     const updated = StorageService.recordProblemSolve(problemId, xpReward);
-    setCurrentUser({ ...updated });
+    if (updated) setCurrentUser({ ...updated });
   };
 
   const handleToggleSaveProblem = (problemId: string) => {
     StorageService.toggleSaveProblem(problemId);
-    setCurrentUser(StorageService.getCurrentUser());
+    const user = StorageService.getCurrentUser();
+    if (user) setCurrentUser(user);
   };
 
   const handleMarkNotificationsRead = () => {
@@ -113,17 +139,14 @@ export function App() {
     setNotifications(notifs);
   };
 
-  const handleAuthSuccess = (partialUser: Partial<UserProfile>) => {
-    const updated = {
-      ...currentUser,
-      ...partialUser
-    };
-    StorageService.saveCurrentUser(updated);
-    StorageService.setAuthenticated(true);
-    setCurrentUser(updated);
+  // Sections 8 & 9: Auth success handling with onboarding routing
+  const handleAuthSuccess = (user: UserProfile, isNewUser: boolean) => {
+    setCurrentUser(user);
     setIsLoggedIn(true);
     setIsAuthOpen(false);
-    if (!updated.onboarding_completed) {
+
+    // If new user or onboarding not completed, route to onboarding wizard
+    if (isNewUser || !user.onboarding_completed) {
       setIsOnboardingOpen(true);
     } else {
       setCurrentView('dashboard');
@@ -131,9 +154,11 @@ export function App() {
   };
 
   const handleOnboardingComplete = (updated: Partial<UserProfile>) => {
-    const complete = {
+    if (!currentUser) return;
+    const complete: UserProfile = {
       ...currentUser,
-      ...updated
+      ...updated,
+      onboarding_completed: true
     };
     StorageService.saveCurrentUser(complete);
     setCurrentUser(complete);
@@ -148,11 +173,14 @@ export function App() {
   const handleCompleteFirstLesson = (problemId: string) => {
     setIsFirstLessonOpen(false);
     const updated = StorageService.completeFirstLesson();
-    setCurrentUser(updated);
-    handleNavigate('workspace', problemId);
+    if (updated) {
+      setCurrentUser(updated);
+      handleNavigate('workspace', problemId);
+    }
   };
 
   const handleApplyAssessmentRecommendation = (recommendedTopic: string, scores: Record<string, number>) => {
+    if (!currentUser) return;
     const updated = {
       ...currentUser,
       recommendedStartingTopic: recommendedTopic,
@@ -187,18 +215,33 @@ export function App() {
         {currentView === 'landing' && (
           <>
             <LandingHero
-              onStartCoding={() => handleNavigate('problems')}
-              onExploreRoadmap={() => handleNavigate('roadmaps')}
+              onStartCoding={() => {
+                if (isLoggedIn) handleNavigate('problems');
+                else handleOpenAuth('signup');
+              }}
+              onExploreRoadmap={() => {
+                if (isLoggedIn) handleNavigate('roadmaps');
+                else handleOpenAuth('signup');
+              }}
             />
             <LandingSections
-              onStartCoding={() => handleNavigate('problems')}
-              onExploreRoadmap={() => handleNavigate('roadmaps')}
-              onSelectPattern={(patternId) => handleNavigate('patterns', patternId)}
+              onStartCoding={() => {
+                if (isLoggedIn) handleNavigate('problems');
+                else handleOpenAuth('signup');
+              }}
+              onExploreRoadmap={() => {
+                if (isLoggedIn) handleNavigate('roadmaps');
+                else handleOpenAuth('signup');
+              }}
+              onSelectPattern={(patternId) => {
+                if (isLoggedIn) handleNavigate('patterns', patternId);
+                else handleOpenAuth('signup');
+              }}
             />
           </>
         )}
 
-        {currentView === 'dashboard' && (
+        {currentView === 'dashboard' && currentUser && (
           <UserDashboard
             currentUser={currentUser}
             onNavigate={handleNavigate}
@@ -207,7 +250,7 @@ export function App() {
           />
         )}
 
-        {currentView === 'problems' && (
+        {currentView === 'problems' && currentUser && (
           <ProblemLibrary
             currentUser={currentUser}
             initialFilter={problemFilterCategory}
@@ -216,7 +259,7 @@ export function App() {
           />
         )}
 
-        {currentView === 'workspace' && (
+        {currentView === 'workspace' && currentUser && (
           <ProblemWorkspace
             problem={activeProblem}
             currentUser={currentUser}
@@ -226,14 +269,14 @@ export function App() {
           />
         )}
 
-        {currentView === 'roadmaps' && (
+        {currentView === 'roadmaps' && currentUser && (
           <RoadmapView
             currentUser={currentUser}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
 
-        {currentView === 'patterns' && (
+        {currentView === 'patterns' && currentUser && (
           <PatternsView
             currentUser={currentUser}
             initialPatternId={activePatternId}
@@ -241,47 +284,47 @@ export function App() {
           />
         )}
 
-        {currentView === 'submissions' && (
+        {currentView === 'submissions' && currentUser && (
           <SubmissionsView />
         )}
 
-        {currentView === 'profile' && (
+        {currentView === 'profile' && currentUser && (
           <UserProfileView
-            userId={activeProfileUserId}
+            userId={activeProfileUserId || currentUser.id}
             currentUser={currentUser}
             onUpdateCurrentUser={(u) => setCurrentUser(u)}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
 
-        {currentView === 'discuss' && (
+        {currentView === 'discuss' && currentUser && (
           <DiscussionsView
             currentUser={currentUser}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
           />
         )}
 
-        {currentView === 'leaderboard' && (
+        {currentView === 'leaderboard' && currentUser && (
           <LeaderboardView
             currentUser={currentUser}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
           />
         )}
 
-        {currentView === 'contests' && (
+        {currentView === 'contests' && currentUser && (
           <ContestsView
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
 
-        {currentView === 'settings' && (
+        {currentView === 'settings' && currentUser && (
           <SettingsView
             currentUser={currentUser}
             onUpdateCurrentUser={(u) => setCurrentUser(u)}
           />
         )}
 
-        {currentView === 'admin' && (
+        {currentView === 'admin' && currentUser && (
           <AdminView
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
@@ -295,18 +338,17 @@ export function App() {
             onClose={() => handleNavigate('landing')}
             onNavigateHome={() => handleNavigate('landing')}
             onSuccess={handleAuthSuccess}
-            onOpenOnboarding={() => setIsOnboardingOpen(true)}
           />
         )}
       </main>
 
-      {/* Global Footer (hidden only inside workspace to maximize editor viewport) */}
+      {/* Global Footer (hidden on auth pages and active coding workspace) */}
       {currentView !== 'workspace' && currentView !== 'signin' && currentView !== 'signup' && (
         <Footer onNavigate={handleNavigate} />
       )}
 
       {/* Mobile Bottom Navigation Bar */}
-      {currentView !== 'signin' && currentView !== 'signup' && (
+      {currentView !== 'signin' && currentView !== 'signup' && isLoggedIn && (
         <MobileNav
           currentView={currentView}
           onNavigate={handleNavigate}
@@ -320,38 +362,43 @@ export function App() {
         onNavigate={handleNavigate}
       />
 
-      {/* Auth Modal */}
+      {/* Auth Modal (Overlay dialog) */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onSuccess={handleAuthSuccess}
-        onOpenOnboarding={() => setIsOnboardingOpen(true)}
         initialMode={authInitialMode}
       />
 
       {/* Onboarding Wizard Modal */}
-      <OnboardingWizard
-        isOpen={isOnboardingOpen}
-        currentUser={currentUser}
-        onComplete={handleOnboardingComplete}
-        onOpenAssessment={() => setIsAssessmentOpen(true)}
-      />
+      {currentUser && (
+        <OnboardingWizard
+          isOpen={isOnboardingOpen}
+          currentUser={currentUser}
+          onComplete={handleOnboardingComplete}
+          onOpenAssessment={() => setIsAssessmentOpen(true)}
+        />
+      )}
 
       {/* Interactive First Lesson Modal (Section 10) */}
-      <FirstLessonModal
-        isOpen={isFirstLessonOpen}
-        currentUser={currentUser}
-        onClose={() => setIsFirstLessonOpen(false)}
-        onStartProblem={handleCompleteFirstLesson}
-      />
+      {currentUser && (
+        <FirstLessonModal
+          isOpen={isFirstLessonOpen}
+          currentUser={currentUser}
+          onClose={() => setIsFirstLessonOpen(false)}
+          onStartProblem={handleCompleteFirstLesson}
+        />
+      )}
 
       {/* Diagnostic Skill Assessment Modal (Section 24) */}
-      <SkillAssessmentModal
-        isOpen={isAssessmentOpen}
-        currentUser={currentUser}
-        onClose={() => setIsAssessmentOpen(false)}
-        onApplyRecommendation={handleApplyAssessmentRecommendation}
-      />
+      {currentUser && (
+        <SkillAssessmentModal
+          isOpen={isAssessmentOpen}
+          currentUser={currentUser}
+          onClose={() => setIsAssessmentOpen(false)}
+          onApplyRecommendation={handleApplyAssessmentRecommendation}
+        />
+      )}
 
     </div>
   );

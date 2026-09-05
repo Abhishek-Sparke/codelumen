@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  Code2, Flame, Bell, Search, User, CheckCircle2, Bookmark, 
-  Settings, LogOut, Shield, ChevronDown, Sparkles
+  Flame, Bell, Search, User, Bookmark, 
+  Settings, LogOut, ChevronDown, Sparkles
 } from 'lucide-react';
 import { UserProfile, NotificationItem } from '../../types';
 import { CodeSparkLogo } from '../brand/CodeSparkLogo';
@@ -9,7 +9,7 @@ import { CodeSparkLogo } from '../brand/CodeSparkLogo';
 interface NavbarProps {
   currentView: string;
   onNavigate: (view: string, param?: string) => void;
-  currentUser: UserProfile;
+  currentUser: UserProfile | null;
   notifications: NotificationItem[];
   onOpenSearch: () => void;
   onOpenAuth: (mode?: 'login' | 'signup') => void;
@@ -26,7 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSearch,
   onOpenAuth,
   onMarkNotificationsRead,
-  isLoggedIn = true,
+  isLoggedIn = false,
   onLogout
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -34,23 +34,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const navLinks = [
+  // Section 13: Logged out vs Logged in Navigation
+  const loggedOutNavLinks = [
     { id: 'problems', label: 'Problems' },
     { id: 'roadmaps', label: 'Roadmaps' },
-    { id: 'patterns', label: 'Patterns' },
-    { id: 'contests', label: 'Contests' },
-    { id: 'discuss', label: 'Discuss' },
-    { id: 'leaderboard', label: 'Leaderboard' },
+    { id: 'landing', label: 'Features' },
   ];
 
+  const loggedInNavLinks = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'problems', label: 'Problems' },
+    { id: 'roadmaps', label: 'Roadmap' },
+    { id: 'contests', label: 'Contests' },
+    { id: 'discuss', label: 'Discuss' },
+  ];
+
+  const navLinks = isLoggedIn ? loggedInNavLinks : loggedOutNavLinks;
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#09090c]/85 backdrop-blur-xl transition-colors">
+    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#09090c]/90 backdrop-blur-xl transition-colors">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         
-        {/* Brand Logo & Main Nav */}
+        {/* Brand Logo & Navigation Links */}
         <div className="flex items-center gap-8">
           <button 
-            onClick={() => onNavigate('landing')}
+            onClick={() => onNavigate(isLoggedIn ? 'dashboard' : 'landing')}
             className="group flex items-center gap-2.5 text-left focus:outline-none"
             aria-label="CodeSpark Home"
           >
@@ -89,52 +97,51 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right Action Utilities */}
         <div className="flex items-center gap-2.5 sm:gap-3">
           
-          {/* Global Search Button with '/' shortcut badge */}
-          <button
-            onClick={onOpenSearch}
-            className="flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/60 transition-all hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
-            aria-label="Global Search"
-          >
-            <Search className="h-3.5 w-3.5 text-white/50" />
-            <span className="hidden sm:inline">Search problems, patterns...</span>
-            <span className="inline sm:hidden">Search</span>
-            <kbd className="hidden items-center rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-mono text-white/40 sm:inline-flex">
-              /
-            </kbd>
-          </button>
-
+          {/* Section 13: Logged Out Navbar buttons: Log In, Start Coding */}
           {!isLoggedIn ? (
-            <div className="flex items-center gap-1.5 sm:gap-2.5">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => onOpenAuth('login')}
-                className="rounded-full px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/[0.05] transition-colors"
+                className="rounded-full px-4 py-1.5 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/[0.06] transition-colors"
               >
-                Sign in
+                Log In
               </button>
+
               <button
                 onClick={() => onOpenAuth('signup')}
-                className="flex items-center gap-2 rounded-full border border-white/20 bg-white text-gray-900 px-3 sm:px-3.5 py-1.5 text-xs font-bold shadow-sm hover:bg-slate-100 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 px-4 sm:px-5 py-2 text-xs font-bold uppercase tracking-wider text-black shadow-md shadow-amber-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
-                <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.37 7.32 24 12 24z" />
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z" />
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.32 0 3.25 2.63 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-                </svg>
-                <span>Sign up</span>
+                <span>Start Coding</span>
+                <Sparkles className="h-3.5 w-3.5 fill-black" />
               </button>
             </div>
           ) : (
+            /* Section 13: Logged In Navbar right: Search, Streak, Notifications, Profile */
             <>
-              {/* Coding Streak Pill */}
+              {/* Search Button */}
               <button
-                onClick={() => onNavigate('dashboard')}
-                title={`${currentUser.streak} Day Active Practice Streak`}
-                className="group flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 transition-all hover:border-amber-500/40 hover:bg-amber-500/20"
+                onClick={onOpenSearch}
+                className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/60 transition-all hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                aria-label="Global Search"
               >
-                <Flame className="h-3.5 w-3.5 fill-amber-400 text-amber-400 transition-transform group-hover:scale-110" />
-                <span>{currentUser.streak}</span>
+                <Search className="h-3.5 w-3.5 text-white/50" />
+                <span className="hidden sm:inline">Search...</span>
+                <kbd className="hidden items-center rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-mono text-white/40 sm:inline-flex">
+                  /
+                </kbd>
               </button>
+
+              {/* Coding Streak Pill */}
+              {currentUser && (
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  title={`${currentUser.streak} Day Active Streak`}
+                  className="group flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 transition-all hover:border-amber-500/40 hover:bg-amber-500/20"
+                >
+                  <Flame className="h-3.5 w-3.5 fill-amber-400 text-amber-400 transition-transform group-hover:scale-110" />
+                  <span>{currentUser.streak}</span>
+                </button>
+              )}
 
               {/* Notifications Dropdown */}
               <div className="relative">
@@ -165,7 +172,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           onClick={onMarkNotificationsRead}
                           className="text-[11px] font-medium text-amber-400 hover:text-amber-300"
                         >
-                          Mark all as read
+                          Mark all read
                         </button>
                       )}
                     </div>
@@ -194,104 +201,91 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* User Profile Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] p-1 pr-2.5 text-xs transition-all hover:border-white/20 hover:bg-white/[0.08]"
-                  aria-label="User profile menu"
-                >
-                  <img 
-                    src={currentUser.avatar} 
-                    alt={currentUser.name} 
-                    className="h-6.5 w-6.5 rounded-full object-cover ring-1 ring-white/20"
-                  />
-                  <span className="hidden text-xs font-medium text-white/85 sm:inline">
-                    {currentUser.username}
-                  </span>
-                  <ChevronDown className="h-3 w-3 text-white/50" />
-                </button>
-
-                {showProfileMenu && (
-                  <div 
-                    className="glass-panel absolute right-0 mt-2.5 w-60 rounded-2xl p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
-                    onMouseLeave={() => setShowProfileMenu(false)}
+              {currentUser && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProfileMenu(!showProfileMenu)}
+                    className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] p-1 pr-2.5 text-xs transition-all hover:border-white/20 hover:bg-white/[0.08]"
+                    aria-label="User profile menu"
                   >
-                    {/* Header Profile Info */}
-                    <div className="border-b border-white/[0.08] px-3 py-2.5">
-                      <p className="text-xs font-semibold text-white">{currentUser.name}</p>
-                      <p className="text-[11px] text-white/50">@{currentUser.username}</p>
-                      <div className="mt-2 flex items-center justify-between rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[11px]">
-                        <span className="text-amber-400 font-semibold">{currentUser.levelTitle}</span>
-                        <span className="text-white/60 font-mono">Lvl {currentUser.level} · {currentUser.xp} XP</span>
+                    <img 
+                      src={currentUser.avatar} 
+                      alt={currentUser.name} 
+                      className="h-6.5 w-6.5 rounded-full object-cover ring-1 ring-white/20"
+                    />
+                    <span className="hidden text-xs font-medium text-white/85 sm:inline">
+                      {currentUser.username}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-white/50" />
+                  </button>
+
+                  {showProfileMenu && (
+                    <div 
+                      className="glass-panel absolute right-0 mt-2.5 w-60 rounded-2xl p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+                      onMouseLeave={() => setShowProfileMenu(false)}
+                    >
+                      {/* Profile Header */}
+                      <div className="border-b border-white/[0.08] px-3 py-2.5">
+                        <p className="text-xs font-semibold text-white">{currentUser.name}</p>
+                        <p className="text-[11px] text-white/50">@{currentUser.username}</p>
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[11px]">
+                          <span className="text-amber-400 font-semibold">{currentUser.levelTitle}</span>
+                          <span className="text-white/60 font-mono">Lvl {currentUser.level} · {currentUser.xp} XP</span>
+                        </div>
+                      </div>
+
+                      {/* Menu items */}
+                      <div className="mt-1 space-y-0.5">
+                        <button
+                          onClick={() => { onNavigate('profile', currentUser.id); setShowProfileMenu(false); }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <User className="h-3.5 w-3.5 text-white/50" />
+                          Profile
+                        </button>
+                        <button
+                          onClick={() => { onNavigate('dashboard'); setShowProfileMenu(false); }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-white/50" />
+                          Dashboard
+                        </button>
+                        <button
+                          onClick={() => { onNavigate('problems', 'saved'); setShowProfileMenu(false); }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <Bookmark className="h-3.5 w-3.5 text-white/50" />
+                          Saved Problems ({currentUser.savedProblemIds?.length || 0})
+                        </button>
+                        <button
+                          onClick={() => { onNavigate('settings'); setShowProfileMenu(false); }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <Settings className="h-3.5 w-3.5 text-white/50" />
+                          Settings
+                        </button>
+                        
+                        <div className="my-1 border-t border-white/[0.08]" />
+
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            if (onLogout) onLogout();
+                          }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        >
+                          <LogOut className="h-3.5 w-3.5" />
+                          Log Out
+                        </button>
                       </div>
                     </div>
-
-                    {/* Menu items */}
-                    <div className="mt-1 space-y-0.5">
-                      <button
-                        onClick={() => { onNavigate('profile', currentUser.id); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <User className="h-3.5 w-3.5 text-white/50" />
-                        Profile
-                      </button>
-                      <button
-                        onClick={() => { onNavigate('dashboard'); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 text-white/50" />
-                        My Progress
-                      </button>
-                      <button
-                        onClick={() => { onNavigate('problems', 'saved'); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <Bookmark className="h-3.5 w-3.5 text-white/50" />
-                        Saved Problems ({currentUser.savedProblemIds.length})
-                      </button>
-                      <button
-                        onClick={() => { onNavigate('submissions'); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-white/50" />
-                        Submissions
-                      </button>
-                      <button
-                        onClick={() => { onNavigate('settings'); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <Settings className="h-3.5 w-3.5 text-white/50" />
-                        Settings
-                      </button>
-                      <button
-                        onClick={() => { onNavigate('admin'); setShowProfileMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-amber-400/90 hover:bg-amber-400/10 hover:text-amber-300"
-                      >
-                        <Shield className="h-3.5 w-3.5 text-amber-400" />
-                        Admin Dashboard
-                      </button>
-
-                      <div className="my-1 border-t border-white/[0.06]" />
-
-                      <button
-                        onClick={() => {
-                          if (onLogout) onLogout();
-                          setShowProfileMenu(false);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-rose-400/80 hover:bg-rose-500/10 hover:text-rose-300"
-                      >
-                        <LogOut className="h-3.5 w-3.5 text-rose-400" />
-                        Log out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
         </div>
-
       </div>
     </header>
   );

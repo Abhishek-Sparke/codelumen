@@ -24,24 +24,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'problems' | 'badges'>('overview');
 
-  const profileUser = StorageService.getUserById(userId);
+  const profileUser = StorageService.getUserById(userId) || currentUser;
   const isOwnProfile = profileUser.id === currentUser.id || userId === 'user-current';
   const isFollowing = currentUser.followingIds.includes(profileUser.id);
   const isZeroProgress = profileUser.solvedProblemIds.length === 0;
 
   const handleToggleFollow = () => {
     const { current } = StorageService.toggleFollowUser(profileUser.id);
-    onUpdateCurrentUser(current);
-  };
-
-  const handleToggleDemoMode = () => {
-    if (currentUser.isDemoAccount) {
-      const fresh = StorageService.resetToFreshUser();
-      onUpdateCurrentUser(fresh);
-    } else {
-      const demo = StorageService.loadDemoVeteranUser();
-      onUpdateCurrentUser(demo);
-    }
+    if (current) onUpdateCurrentUser(current);
   };
 
   // Solved problems detailed objects
@@ -68,7 +58,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         if (isZeroProgress) {
           col.push(0);
         } else {
-          // Check actual activity in user calendar or pseudo intensity for veteran demo
+          // Check activity intensity level
           const level = (w * 3 + d) % 5 === 0 ? 2 : (w * 7 + d) % 3 === 0 ? 1 : (w * 2 + d) % 9 === 0 ? 3 : 0;
           col.push(level);
         }
@@ -127,11 +117,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-0.5 text-xs font-semibold text-amber-400">
                   {isZeroProgress ? (profileUser.experienceLevel || 'Beginner') : profileUser.levelTitle}
                 </span>
-                {profileUser.isDemoAccount && (
-                  <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
-                    Demo Mode
-                  </span>
-                )}
               </div>
               <p className="text-xs text-white/50 font-mono mt-0.5">
                 @{profileUser.username} · Joined {profileUser.joinedDate}
@@ -142,7 +127,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Follow / Development Actions */}
+          {/* Follow / Profile Actions */}
           <div className="flex flex-col items-start sm:items-end justify-between sm:justify-center gap-3 border-t sm:border-t-0 border-white/[0.06] pt-4 sm:pt-0">
             {!isOwnProfile ? (
               <button
@@ -166,15 +151,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 )}
               </button>
             ) : (
-              /* Developer Mode Switcher (Section 1: clearly separate demo data from real user data) */
-              <button
-                onClick={handleToggleDemoMode}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-colors"
-                title="Toggle between fresh 0-progress account and veteran demo profile"
-              >
-                <Eye className="h-3.5 w-3.5 text-amber-400" />
-                <span>{currentUser.isDemoAccount ? 'Switch to Fresh User' : 'Preview Veteran Demo'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Verified Member
+                </span>
+              </div>
             )}
 
             <div className="flex items-center gap-4 text-xs font-mono text-white/60">

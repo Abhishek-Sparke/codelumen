@@ -4,6 +4,7 @@ import {
   BookOpen, Zap, Layers, Activity, Award, CheckCircle2, ChevronRight 
 } from 'lucide-react';
 import { SupportedLanguage, ExperienceLevel, UserGoal, UserProfile, LearningStyle } from '../../types';
+import { StorageService } from '../../services/storage';
 
 interface OnboardingWizardProps {
   isOpen: boolean;
@@ -18,21 +19,40 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   onComplete,
   onOpenAssessment
 }) => {
-  // Steps:
-  // 1: Welcome Screen
-  // 2: Experience Level
-  // 3: Goals (Multi-select)
-  // 4: Programming Language
-  // 5: Learning Preference
-  // 6: Personalized Starting Point
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+  // Section 18: Resume from last saved onboarding step if interrupted
+  const savedProgress = StorageService.getOnboardingProgress(currentUser.id);
+  const initialStep = (savedProgress?.current_step && savedProgress.current_step >= 1 && savedProgress.current_step <= 6)
+    ? (savedProgress.current_step as 1 | 2 | 3 | 4 | 5 | 6)
+    : 1;
+
+  const [step, setStepState] = useState<1 | 2 | 3 | 4 | 5 | 6>(initialStep);
   const [name, setName] = useState(currentUser.name || 'Developer');
-  const [experience, setExperience] = useState<ExperienceLevel>(currentUser.experienceLevel || 'Beginner');
-  const [selectedGoals, setSelectedGoals] = useState<string[]>(
-    currentUser.goals && currentUser.goals.length > 0 ? currentUser.goals : ['DSA Fundamentals', 'Coding Interviews']
+  const [experience, setExperience] = useState<ExperienceLevel>(
+    savedProgress?.experience_level || currentUser.experienceLevel || 'Beginner'
   );
-  const [language, setLanguage] = useState<SupportedLanguage>(currentUser.preferredLanguage || 'python');
-  const [learningStyle, setLearningStyle] = useState<LearningStyle>(currentUser.learningStyle || 'mixed');
+  const [selectedGoals, setSelectedGoals] = useState<string[]>(
+    savedProgress?.goals && savedProgress.goals.length > 0 
+      ? savedProgress.goals 
+      : (currentUser.goals && currentUser.goals.length > 0 ? currentUser.goals : ['DSA Fundamentals', 'Coding Interviews'])
+  );
+  const [language, setLanguage] = useState<SupportedLanguage>(
+    savedProgress?.preferred_language || currentUser.preferredLanguage || 'python'
+  );
+  const [learningStyle, setLearningStyle] = useState<LearningStyle>(
+    savedProgress?.learning_style || currentUser.learningStyle || 'mixed'
+  );
+
+  const setStep = (nextStep: 1 | 2 | 3 | 4 | 5 | 6) => {
+    setStepState(nextStep);
+    // Section 18: Persist onboarding progress immediately
+    StorageService.saveOnboardingProgress(currentUser.id, {
+      current_step: nextStep,
+      experience_level: experience,
+      goals: selectedGoals,
+      preferred_language: language,
+      learning_style: learningStyle
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -98,7 +118,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   const roadmapInfo = getStartingRoadmap();
 
   const handleFinish = (openAssessment = false) => {
-    onComplete({
+    const finalData = {
       name: name.trim() || 'Developer',
       experienceLevel: experience,
       goals: selectedGoals,
@@ -106,15 +126,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       preferredLanguage: language,
       learningStyle,
       recommendedStartingTopic: roadmapInfo.startingTopic,
-      journeyState: 'starting_journey',
-      onboarding_completed: true,
-      // Strict Section 1 Zero Progress guarantee
-      solvedProblemIds: [],
-      xp: 0,
-      streak: 0,
-      longestStreak: 0,
-      badges: []
-    });
+      journeyState: 'starting_journey' as const,
+      onboarding_completed: true
+    };
+
+    const completedUser = StorageService.completeOnboarding(currentUser.id, finalData);
+    onComplete(completedUser || finalData);
 
     if (openAssessment && onOpenAssessment) {
       onOpenAssessment();

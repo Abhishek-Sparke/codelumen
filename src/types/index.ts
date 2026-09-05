@@ -69,14 +69,59 @@ export interface UserProfile {
   firstSolveCelebrated?: boolean;
   recommendedStartingTopic?: string;
   skillAssessmentScores?: Record<string, number>;
-  isDemoAccount?: boolean;
   weeklyTarget?: number; // target problems per week (e.g. 3, 5, 7, 10)
   preferences?: UserPreferences;
   onboardingProgress?: OnboardingProgress;
 }
 
+export interface UserProfileRecord {
+  id: string;
+  user_id: string;
+  name: string;
+  username: string;
+  avatar_url: string;
+  bio: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPreferencesRecord {
+  user_id: string;
+  experience_level?: ExperienceLevel;
+  goals?: string[];
+  preferred_language?: SupportedLanguage;
+  learning_style?: LearningStyle;
+  theme?: string;
+  editor_theme?: string;
+  notifications_enabled?: boolean;
+}
+
+export interface UserProgressRecord {
+  user_id: string;
+  xp: number;
+  problems_solved: number;
+  problems_attempted: number;
+  current_streak: number;
+  longest_streak: number;
+  roadmap_progress: number;
+  last_activity_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnboardingProgressRecord {
+  user_id: string;
+  current_step: number;
+  experience_level?: ExperienceLevel;
+  goals?: string[];
+  preferred_language?: SupportedLanguage;
+  learning_style?: LearningStyle;
+  completed: boolean;
+  updated_at: string;
+}
+
 export interface UserPreferences {
-  theme?: 'spark-dark' | 'obsidian' | 'monokai' | 'lumen-dark';
+  theme?: 'spark-dark' | 'obsidian' | 'monokai';
   editorFontSize?: number;
   keybindings?: 'standard' | 'vim' | 'emacs';
   emailNotifications?: boolean;
@@ -88,6 +133,7 @@ export interface OnboardingProgress {
   experienceLevel?: ExperienceLevel;
   goals?: string[];
   preferredLanguage?: SupportedLanguage;
+  learningStyle?: LearningStyle;
   weeklyTarget?: number;
   completed?: boolean;
 }

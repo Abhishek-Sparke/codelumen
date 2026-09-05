@@ -1,4 +1,7 @@
-import { UserProfile, Submission, DiscussionPost, NotificationItem } from '../types';
+import { 
+  UserProfile, Submission, DiscussionPost, NotificationItem,
+  UserProfileRecord, UserPreferencesRecord, UserProgressRecord, OnboardingProgressRecord 
+} from '../types';
 import { SAMPLE_USERS } from '../data/users';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { calculateLevel } from '../data/badges';
@@ -17,7 +20,7 @@ const STORAGE_KEYS = {
 export interface EditorSettings {
   fontSize: number;
   tabSize: number;
-  theme: 'spark-dark' | 'obsidian' | 'monokai' | 'lumen-dark';
+  theme: 'spark-dark' | 'obsidian' | 'monokai';
   wordWrap: boolean;
   autoSave: boolean;
   appearance: 'dark' | 'dim' | 'system';
@@ -32,144 +35,67 @@ const DEFAULT_SETTINGS: EditorSettings = {
   appearance: 'dark'
 };
 
-const INITIAL_SUBMISSIONS: Submission[] = [
-  {
-    id: 'sub-1',
-    problemId: 'p-1',
-    problemTitle: 'Pair Sum Target',
-    difficulty: 'Easy',
-    language: 'python',
-    status: 'Accepted',
-    runtimeMs: 54,
-    memoryMb: 14.8,
-    timestamp: 'Yesterday at 18:42',
-    code: `def pair_sum_target(nums: list[int], target: int) -> list[int]:\n    seen = {}\n    for i, n in enumerate(nums):\n        comp = target - n\n        if comp in seen:\n            return [seen[comp], i]\n        seen[n] = i\n    return []`,
-    passedTestCases: 3,
-    totalTestCases: 3
-  },
-  {
-    id: 'sub-2',
-    problemId: 'p-6',
-    problemTitle: 'Valid Palindrome String',
-    difficulty: 'Easy',
-    language: 'javascript',
-    status: 'Accepted',
-    runtimeMs: 62,
-    memoryMb: 15.2,
-    timestamp: '2 days ago',
-    code: `function isPalindrome(s) {\n  let l = 0, r = s.length - 1;\n  const isAlpha = c => /[a-z0-9]/i.test(c);\n  while (l < r) {\n    while (l < r && !isAlpha(s[l])) l++;\n    while (l < r && !isAlpha(s[r])) r--;\n    if (s[l].toLowerCase() !== s[r].toLowerCase()) return false;\n    l++; r--;\n  }\n  return true;\n}`,
-    passedTestCases: 3,
-    totalTestCases: 3
-  },
-  {
-    id: 'sub-3',
-    problemId: 'p-10',
-    problemTitle: 'Longest Unique Substring',
-    difficulty: 'Medium',
-    language: 'python',
-    status: 'Accepted',
-    runtimeMs: 68,
-    memoryMb: 16.1,
-    timestamp: '3 days ago',
-    code: `def length_of_longest_substring(s: str) -> int:\n    seen = {}\n    max_len = 0\n    l = 0\n    for r, c in enumerate(s):\n        if c in seen and seen[c] >= l:\n            l = seen[c] + 1\n        seen[c] = r\n        max_len = max(max_len, r - l + 1)\n    return max_len`,
-    passedTestCases: 4,
-    totalTestCases: 4
-  }
-];
+const INITIAL_SUBMISSIONS: Submission[] = [];
 
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: 'notif-1',
-    title: 'Daily Challenge Ready',
-    message: 'Longest Consecutive Sequence is today’s +100 XP algorithmic focus.',
+    title: 'Welcome to CodeSpark ⚡',
+    message: 'Your account is ready. Pick your starting roadmap and begin deliberate practice.',
     type: 'streak',
     read: false,
-    timestamp: '2 hours ago',
-    linkUrl: '/problems/p-5'
-  },
-  {
-    id: 'notif-2',
-    title: 'New Follower',
-    message: 'Devon Patel (@devon_p) started following your problem-solving journey.',
-    type: 'follow',
-    read: false,
-    timestamp: '5 hours ago',
-    linkUrl: '/profile/user-4'
-  },
-  {
-    id: 'notif-3',
-    title: 'Biweekly Contest Starting Soon',
-    message: 'CodeSpark Biweekly Sprint #48 begins tomorrow at 14:00 UTC. Set your reminder!',
-    type: 'contest',
-    read: true,
-    timestamp: '1 day ago',
-    linkUrl: '/contests'
-  },
-  {
-    id: 'notif-4',
-    title: 'Badge Unlocked!',
-    message: 'You earned the "Speed Solver" badge for resolving a Medium problem with 95%+ runtime.',
-    type: 'badge',
-    read: true,
-    timestamp: '2 days ago',
-    linkUrl: '/profile/user-current'
+    timestamp: 'Just now',
+    linkUrl: '/roadmaps'
   }
 ];
 
-export const DEFAULT_FRESH_USER: UserProfile = {
-  id: 'user-current',
-  name: 'Abhishek Sparke',
-  username: 'abhishek_sparke',
-  email: 'abhishek.sparke@gmail.com',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  bio: 'Learning algorithms and mastering patterns on CodeSpark.',
-  role: 'user',
-  preferredLanguage: 'python',
-  experienceLevel: 'Beginner',
-  goal: 'DSA Fundamentals',
-  goals: ['DSA Fundamentals', 'Coding Interviews'],
-  learningStyle: 'concepts_first',
-  xp: 0,
-  level: 1,
-  levelTitle: 'Novice',
-  streak: 0,
-  longestStreak: 0,
-  globalRank: 0,
-  followersCount: 0,
-  followingCount: 0,
-  followingIds: [],
-  solvedProblemIds: [],
-  attemptedProblemIds: [],
-  savedProblemIds: [],
-  badges: [],
-  activityCalendar: {},
-  joinedDate: 'Joined today',
-  journeyState: 'starting_journey',
-  onboarding_completed: true,
-  firstLessonCompleted: false,
-  firstSolveCelebrated: false,
-  recommendedStartingTopic: 'Arrays & Hashing',
-  isDemoAccount: false,
-  weeklyTarget: 5
-};
-
-interface StoredAccount {
+export interface StoredAccount {
   id: string;
   email: string;
   username: string;
-  password?: string;
+  salt: string;
+  passwordHash: string;
+  resetToken?: string;
+  resetExpiry?: number;
+  profile: UserProfileRecord;
+  preferences: UserPreferencesRecord;
+  progress: UserProgressRecord;
+  onboarding: OnboardingProgressRecord;
   user: UserProfile;
 }
 
+// =============================================================================
+// CRYPTOGRAPHIC UTILITIES (Web Crypto SHA-256)
+// =============================================================================
+export async function hashPassword(password: string, salt: string): Promise<string> {
+  const enc = new TextEncoder();
+  const keyData = enc.encode(`${salt}:${password}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', keyData);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function generateSalt(): string {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export const StorageService = {
-  getCurrentUser(): UserProfile {
+  getCurrentUser(): UserProfile | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER) || localStorage.getItem('codelumen_current_user');
-      if (data) return JSON.parse(data);
+      const isAuth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE);
+      if (isAuth !== 'true') return null;
+
+      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      if (data) {
+        const user = JSON.parse(data);
+        if (user && user.id) return user;
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching current user:', e);
     }
-    return { ...DEFAULT_FRESH_USER };
+    return null;
   },
 
   saveCurrentUser(user: UserProfile): void {
@@ -178,24 +104,36 @@ export const StorageService = {
       user.level = levelInfo.level;
       user.levelTitle = levelInfo.title;
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-      // Also update in all users if present
-      const allUsers = this.getAllUsers();
-      const idx = allUsers.findIndex(u => u.id === user.id);
+      
+      // Also sync back to stored accounts
+      const accounts = this.getAuthAccounts();
+      const idx = accounts.findIndex(a => a.id === user.id || a.user.id === user.id);
       if (idx >= 0) {
-        allUsers[idx] = user;
-        this.saveAllUsers(allUsers);
+        accounts[idx].user = user;
+        accounts[idx].profile.name = user.name;
+        accounts[idx].profile.username = user.username;
+        accounts[idx].profile.bio = user.bio;
+        accounts[idx].profile.updated_at = new Date().toISOString();
+        accounts[idx].progress.xp = user.xp;
+        accounts[idx].progress.problems_solved = user.solvedProblemIds.length;
+        accounts[idx].progress.problems_attempted = user.attemptedProblemIds.length;
+        accounts[idx].progress.current_streak = user.streak;
+        accounts[idx].progress.longest_streak = user.longestStreak;
+        accounts[idx].progress.updated_at = new Date().toISOString();
+        this.saveAuthAccounts(accounts);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error saving current user:', e);
     }
   },
 
   isAuthenticated(): boolean {
     try {
-      const auth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE) || localStorage.getItem('codelumen_authenticated');
-      return auth !== null ? auth === 'true' : true;
+      const auth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE);
+      if (auth !== 'true') return false;
+      return this.getCurrentUser() !== null;
     } catch {
-      return true;
+      return false;
     }
   },
 
@@ -210,8 +148,9 @@ export const StorageService = {
   logout(): void {
     try {
       localStorage.setItem(STORAGE_KEYS.AUTH_STATE, 'false');
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     } catch (e) {
-      console.error(e);
+      console.error('Logout error:', e);
     }
   },
 
@@ -220,7 +159,7 @@ export const StorageService = {
       const data = localStorage.getItem(STORAGE_KEYS.AUTH_ACCOUNTS);
       if (data) return JSON.parse(data);
     } catch (e) {
-      console.error(e);
+      console.error('Error reading auth accounts:', e);
     }
     return [];
   },
@@ -229,198 +168,332 @@ export const StorageService = {
     try {
       localStorage.setItem(STORAGE_KEYS.AUTH_ACCOUNTS, JSON.stringify(accounts));
     } catch (e) {
-      console.error(e);
+      console.error('Error writing auth accounts:', e);
     }
   },
 
   checkEmailAvailable(email: string): boolean {
     const cleanEmail = email.trim().toLowerCase();
     const accounts = this.getAuthAccounts();
-    if (accounts.some(a => a.email.toLowerCase() === cleanEmail)) return false;
-    const allUsers = this.getAllUsers();
-    return !allUsers.some(u => u.email.toLowerCase() === cleanEmail);
+    return !accounts.some(a => a.email.toLowerCase() === cleanEmail);
   },
 
   checkUsernameAvailable(username: string): boolean {
     const cleanUsername = username.trim().toLowerCase();
     const accounts = this.getAuthAccounts();
-    if (accounts.some(a => a.username.toLowerCase() === cleanUsername)) return false;
-    const allUsers = this.getAllUsers();
-    return !allUsers.some(u => u.username.toLowerCase() === cleanUsername);
+    return !accounts.some(a => a.username.toLowerCase() === cleanUsername);
   },
 
-  registerUser(data: {
+  async registerUser(data: {
     name: string;
     username: string;
     email: string;
-    password?: string;
-    avatar?: string;
-  }): { success: boolean; user?: UserProfile; error?: string } {
+    password: string;
+  }): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const email = data.email.trim().toLowerCase();
     const username = data.username.trim().toLowerCase();
+    const name = data.name.trim();
 
-    if (!email || !username) {
-      return { success: false, error: 'Email and username are required.' };
+    if (!name) {
+      return { success: false, error: 'Full name is required.' };
+    }
+    if (!username || username.length < 3) {
+      return { success: false, error: 'Username must be at least 3 characters long.' };
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return { success: false, error: 'Username may only contain letters, numbers, and underscores.' };
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { success: false, error: 'Enter a valid email address.' };
+    }
+    if (!data.password || data.password.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters.' };
     }
 
     if (!this.checkEmailAvailable(email)) {
       return { success: false, error: 'An account with this email already exists.' };
     }
-
     if (!this.checkUsernameAvailable(username)) {
-      return { success: false, error: 'This username is already taken.' };
+      return { success: false, error: 'Username is already taken.' };
     }
 
-    const newUser: UserProfile = {
-      ...DEFAULT_FRESH_USER,
-      id: `user-${Date.now()}`,
-      name: data.name.trim() || data.username,
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(data.password, salt);
+    const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+
+    // Section 15: profiles
+    const profileRecord: UserProfileRecord = {
+      id: `prf_${Date.now()}`,
+      user_id: userId,
+      name,
       username,
-      email,
-      avatar: data.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
       bio: 'New explorer on CodeSpark.',
-      joinedDate: 'Joined today',
-      onboarding_completed: false,
-      journeyState: 'new_account',
-      xp: 0,
-      level: 1,
-      streak: 0,
-      longestStreak: 0,
-      solvedProblemIds: [],
-      attemptedProblemIds: [],
-      badges: []
+      created_at: now,
+      updated_at: now
     };
 
-    // Save account
-    const accounts = this.getAuthAccounts();
-    accounts.push({
-      id: newUser.id,
+    // Section 16: user_preferences
+    const preferencesRecord: UserPreferencesRecord = {
+      user_id: userId,
+      theme: 'spark-dark',
+      editor_theme: 'spark-dark',
+      notifications_enabled: true
+    };
+
+    // Section 17: user_progress (all zero for new users)
+    const progressRecord: UserProgressRecord = {
+      user_id: userId,
+      xp: 0,
+      problems_solved: 0,
+      problems_attempted: 0,
+      current_streak: 0,
+      longest_streak: 0,
+      roadmap_progress: 0,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Section 18: onboarding_progress
+    const onboardingRecord: OnboardingProgressRecord = {
+      user_id: userId,
+      current_step: 1,
+      completed: false,
+      updated_at: now
+    };
+
+    // Full UserProfile object
+    const newUser: UserProfile = {
+      id: userId,
+      name,
+      username,
+      email,
+      avatar: profileRecord.avatar_url,
+      bio: profileRecord.bio,
+      role: 'user',
+      preferredLanguage: 'python',
+      experienceLevel: 'Beginner',
+      goal: 'DSA Fundamentals',
+      goals: [],
+      xp: 0,
+      level: 1,
+      levelTitle: 'Beginner',
+      streak: 0,
+      longestStreak: 0,
+      globalRank: 0,
+      followersCount: 0,
+      followingCount: 0,
+      followingIds: [],
+      solvedProblemIds: [],
+      attemptedProblemIds: [],
+      savedProblemIds: [],
+      badges: [],
+      activityCalendar: {},
+      joinedDate: 'Joined today',
+      journeyState: 'new_account',
+      onboarding_completed: false,
+      firstLessonCompleted: false,
+      firstSolveCelebrated: false,
+      recommendedStartingTopic: 'Arrays & Hashing',
+      weeklyTarget: 5
+    };
+
+    const newAccount: StoredAccount = {
+      id: userId,
       email,
       username,
-      password: data.password,
+      salt,
+      passwordHash,
+      profile: profileRecord,
+      preferences: preferencesRecord,
+      progress: progressRecord,
+      onboarding: onboardingRecord,
       user: newUser
-    });
+    };
+
+    const accounts = this.getAuthAccounts();
+    accounts.push(newAccount);
     this.saveAuthAccounts(accounts);
 
-    // Save as current user and authenticate
     this.saveCurrentUser(newUser);
     this.setAuthenticated(true);
-
-    // Add to all users
-    const allUsers = this.getAllUsers();
-    allUsers.push(newUser);
-    this.saveAllUsers(allUsers);
 
     return { success: true, user: newUser };
   },
 
-  loginUser(identifier: string, password?: string): { success: boolean; user?: UserProfile; error?: string } {
+  async loginUser(
+    identifier: string,
+    password: string
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId || !password) {
+      return { success: false, error: 'Please enter your email and password.' };
+    }
+
     const accounts = this.getAuthAccounts();
-    
-    // Check saved accounts first
-    const matchedAccount = accounts.find(
+    const account = accounts.find(
       a => a.email.toLowerCase() === cleanId || a.username.toLowerCase() === cleanId
     );
 
-    if (matchedAccount) {
-      if (password && matchedAccount.password && matchedAccount.password !== password) {
-        return { success: false, error: 'Invalid password. Please try again.' };
+    if (!account) {
+      return { 
+        success: false, 
+        error: 'Incorrect email or password. Please check your credentials and try again.' 
+      };
+    }
+
+    const checkHash = await hashPassword(password, account.salt);
+    if (checkHash !== account.passwordHash) {
+      return { 
+        success: false, 
+        error: 'Incorrect email or password. Please check your credentials and try again.' 
+      };
+    }
+
+    this.saveCurrentUser(account.user);
+    this.setAuthenticated(true);
+    return { success: true, user: account.user };
+  },
+
+  sendPasswordResetEmail(email: string): { success: boolean; message: string } {
+    const cleanEmail = email.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.email.toLowerCase() === cleanEmail);
+    
+    if (account) {
+      account.resetToken = `rst_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      account.resetExpiry = Date.now() + 1000 * 60 * 60; // 1 hr
+      this.saveAuthAccounts(accounts);
+    }
+
+    // Generic confirmation message to avoid revealing whether an email exists
+    return {
+      success: true,
+      message: 'If an account exists with this email address, password reset instructions have been sent.'
+    };
+  },
+
+  async resetPassword(email: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    if (!newPassword || newPassword.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters long.' };
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.email.toLowerCase() === cleanEmail);
+    if (!account) {
+      return { success: false, error: 'Invalid or expired password reset request.' };
+    }
+
+    const newSalt = generateSalt();
+    account.salt = newSalt;
+    account.passwordHash = await hashPassword(newPassword, newSalt);
+    delete account.resetToken;
+    delete account.resetExpiry;
+    this.saveAuthAccounts(accounts);
+    return { success: true };
+  },
+
+  saveOnboardingProgress(userId: string, progress: Partial<OnboardingProgressRecord>): void {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    if (account) {
+      account.onboarding = {
+        ...account.onboarding,
+        ...progress,
+        updated_at: new Date().toISOString()
+      };
+      if (account.user) {
+        if (progress.experience_level) account.user.experienceLevel = progress.experience_level;
+        if (progress.goals) account.user.goals = progress.goals;
+        if (progress.preferred_language) account.user.preferredLanguage = progress.preferred_language;
+        if (progress.learning_style) account.user.learningStyle = progress.learning_style;
+        if (progress.current_step) {
+          account.user.onboardingProgress = {
+            step: progress.current_step,
+            experienceLevel: account.onboarding.experience_level,
+            goals: account.onboarding.goals,
+            preferredLanguage: account.onboarding.preferred_language,
+            learningStyle: account.onboarding.learning_style
+          };
+        }
       }
-      this.saveCurrentUser(matchedAccount.user);
-      this.setAuthenticated(true);
-      return { success: true, user: matchedAccount.user };
+      this.saveAuthAccounts(accounts);
+      this.saveCurrentUser(account.user);
     }
+  },
 
-    // Check sample users (demo/fallback login)
-    const allUsers = this.getAllUsers();
-    const matchedUser = allUsers.find(
-      u => u.email.toLowerCase() === cleanId || u.username.toLowerCase() === cleanId
-    );
+  getOnboardingProgress(userId: string): OnboardingProgressRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    return account?.onboarding || null;
+  },
 
-    if (matchedUser) {
-      this.saveCurrentUser(matchedUser);
-      this.setAuthenticated(true);
-      return { success: true, user: matchedUser };
-    }
+  completeOnboarding(userId: string, finalData: Partial<UserProfile>): UserProfile | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    if (!account) return null;
 
-    // If identifier looks like email, allow quick signin
-    if (cleanId.includes('@')) {
-      const parts = cleanId.split('@');
-      const genUsername = parts[0].replace(/[^a-zA-Z0-9_]/g, '') || `sparker_${Date.now()}`;
-      return this.registerUser({
-        name: parts[0],
-        username: genUsername,
-        email: cleanId,
-        password
-      });
-    }
+    account.onboarding.completed = true;
+    account.onboarding.updated_at = new Date().toISOString();
+    if (finalData.experienceLevel) account.onboarding.experience_level = finalData.experienceLevel;
+    if (finalData.goals) account.onboarding.goals = finalData.goals;
+    if (finalData.preferredLanguage) account.onboarding.preferred_language = finalData.preferredLanguage;
+    if (finalData.learningStyle) account.onboarding.learning_style = finalData.learningStyle;
 
-    return { success: false, error: 'Account not found. Please sign up.' };
+    account.user = {
+      ...account.user,
+      ...finalData,
+      onboarding_completed: true,
+      journeyState: 'starting_journey'
+    };
+
+    this.saveAuthAccounts(accounts);
+    this.saveCurrentUser(account.user);
+    return account.user;
   },
 
   getAllUsers(): UserProfile[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.ALL_USERS) || localStorage.getItem('codelumen_all_users');
-      if (data) return JSON.parse(data);
-    } catch (e) {
-      console.error(e);
-    }
-    return SAMPLE_USERS;
+    const accounts = this.getAuthAccounts();
+    const registeredUsers = accounts.map(a => a.user);
+    return registeredUsers.length > 0 ? registeredUsers : SAMPLE_USERS;
   },
 
-  saveAllUsers(users: UserProfile[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  getUserById(id: string): UserProfile {
+  getUserById(id: string): UserProfile | null {
     const current = this.getCurrentUser();
-    if (id === current.id || id === 'user-current') return current;
-    const users = this.getAllUsers();
-    return users.find(u => u.id === id) || current;
+    if (current && (id === current.id || id === 'user-current')) return current;
+    const all = this.getAllUsers();
+    return all.find(u => u.id === id) || current;
   },
 
-  toggleFollowUser(targetUserId: string): { isFollowing: boolean; current: UserProfile; target: UserProfile } {
+  toggleFollowUser(targetUserId: string): { isFollowing: boolean; current: UserProfile | null } {
     const current = this.getCurrentUser();
-    const users = this.getAllUsers();
-    const targetIdx = users.findIndex(u => u.id === targetUserId);
-    const target = targetIdx >= 0 ? users[targetIdx] : SAMPLE_USERS.find(u => u.id === targetUserId)!;
+    if (!current) return { isFollowing: false, current: null };
 
     const isFollowing = current.followingIds.includes(targetUserId);
-
     if (isFollowing) {
       current.followingIds = current.followingIds.filter(id => id !== targetUserId);
       current.followingCount = Math.max(0, current.followingCount - 1);
-      target.followersCount = Math.max(0, target.followersCount - 1);
     } else {
       current.followingIds.push(targetUserId);
       current.followingCount += 1;
-      target.followersCount += 1;
     }
 
     this.saveCurrentUser(current);
-    if (targetIdx >= 0) {
-      users[targetIdx] = target;
-      this.saveAllUsers(users);
-    }
-
-    return { isFollowing: !isFollowing, current, target };
+    return { isFollowing: !isFollowing, current };
   },
 
-  recordProblemSolve(problemId: string, xpReward = 50): UserProfile {
+  recordProblemSolve(problemId: string, xpReward = 50): UserProfile | null {
     const user = this.getCurrentUser();
+    if (!user) return null;
+
     const isFirstSolve = user.solvedProblemIds.length === 0;
 
     if (!user.solvedProblemIds.includes(problemId)) {
       user.solvedProblemIds.push(problemId);
 
-      // Section 15: Exact First Accepted Submission mechanics
       if (isFirstSolve) {
-        user.xp = 100; // Guaranteed 100 XP for first solve
+        user.xp = 100;
         user.streak = 1;
         user.longestStreak = 1;
         if (!user.badges.includes('first-solve')) {
@@ -435,11 +508,9 @@ export const StorageService = {
         user.journeyState = 'active_learner';
       }
       
-      // Update today's activity calendar
       const today = new Date().toISOString().split('T')[0];
       user.activityCalendar[today] = (user.activityCalendar[today] || 0) + 1;
       
-      // Check additional milestone badges
       if (user.solvedProblemIds.length >= 10 && !user.badges.includes('solve-10')) {
         user.badges.push('solve-10');
       }
@@ -452,8 +523,9 @@ export const StorageService = {
     return user;
   },
 
-  completeFirstLesson(): UserProfile {
+  completeFirstLesson(): UserProfile | null {
     const user = this.getCurrentUser();
+    if (!user) return null;
     user.firstLessonCompleted = true;
     if (user.solvedProblemIds.length === 0) {
       user.journeyState = 'first_problem';
@@ -462,47 +534,18 @@ export const StorageService = {
     return user;
   },
 
-  dismissFirstSolveCelebration(): UserProfile {
+  dismissFirstSolveCelebration(): UserProfile | null {
     const user = this.getCurrentUser();
+    if (!user) return null;
     user.firstSolveCelebrated = true;
     user.journeyState = 'active_learner';
     this.saveCurrentUser(user);
     return user;
   },
 
-  resetToFreshUser(): UserProfile {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    const fresh: UserProfile = {
-      ...DEFAULT_FRESH_USER,
-      id: 'user-' + Date.now(),
-      onboarding_completed: false,
-      journeyState: 'new_account',
-      solvedProblemIds: [],
-      attemptedProblemIds: [],
-      xp: 0,
-      streak: 0,
-      longestStreak: 0,
-      badges: []
-    };
-    this.saveCurrentUser(fresh);
-    return fresh;
-  },
-
-  loadDemoVeteranUser(): UserProfile {
-    const veteran: UserProfile = {
-      ...SAMPLE_USERS[0],
-      isDemoAccount: true,
-      onboarding_completed: true,
-      journeyState: 'active_learner',
-      firstLessonCompleted: true,
-      firstSolveCelebrated: true
-    };
-    this.saveCurrentUser(veteran);
-    return veteran;
-  },
-
   toggleSaveProblem(problemId: string): boolean {
     const user = this.getCurrentUser();
+    if (!user) return false;
     const isSaved = user.savedProblemIds.includes(problemId);
     if (isSaved) {
       user.savedProblemIds = user.savedProblemIds.filter(id => id !== problemId);
@@ -515,7 +558,7 @@ export const StorageService = {
 
   getSubmissions(): Submission[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS) || localStorage.getItem('codelumen_submissions');
+      const data = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -535,7 +578,7 @@ export const StorageService = {
 
   getDiscussions(): DiscussionPost[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.DISCUSSIONS) || localStorage.getItem('codelumen_discussions');
+      const data = localStorage.getItem(STORAGE_KEYS.DISCUSSIONS);
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -551,7 +594,10 @@ export const StorageService = {
     }
   },
 
-  addDiscussion(post: Omit<DiscussionPost, 'id' | 'createdAt' | 'likes' | 'commentsCount' | 'comments'>): DiscussionPost {
+  addDiscussion(post: Omit<DiscussionPost, 'id' | 'createdAt' | 'likes' | 'commentsCount' | 'comments'>): DiscussionPost | null {
+    const user = this.getCurrentUser();
+    if (!user) return null;
+
     const discussions = this.getDiscussions();
     const newPost: DiscussionPost = {
       ...post,
@@ -568,10 +614,13 @@ export const StorageService = {
   },
 
   addComment(discussionId: string, content: string): DiscussionPost | undefined {
+    const user = this.getCurrentUser();
+    if (!user) return undefined;
+
     const discussions = this.getDiscussions();
     const disc = discussions.find(d => d.id === discussionId);
     if (!disc) return undefined;
-    const user = this.getCurrentUser();
+
     const comment = {
       id: `c-${Date.now()}`,
       author: {
@@ -607,7 +656,7 @@ export const StorageService = {
 
   getNotifications(): NotificationItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS) || localStorage.getItem('codelumen_notifications');
+      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -627,7 +676,7 @@ export const StorageService = {
 
   getSettings(): EditorSettings {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS) || localStorage.getItem('codelumen_settings');
+      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (data) return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
     } catch (e) {
       console.error(e);
