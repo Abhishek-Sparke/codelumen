@@ -309,6 +309,9 @@ export interface DiscussionComment {
   reactions?: Record<ForumReactionType, string[]>;
   replyToPostNumber?: number;
   replyToAuthor?: string;
+  isAcceptedAnswer?: boolean;
+  editedAt?: string;
+  updatedAt?: string;
 }
 
 export interface DiscussionPost {
@@ -332,9 +335,60 @@ export interface DiscussionPost {
   lastActivityAt?: string;
   isPinned?: boolean;
   isLocked?: boolean;
+  isSolved?: boolean;
+  acceptedPostId?: string;
+  codeSnippet?: { language: string; code: string };
   watchedByUserIds?: string[];
   bookmarkedByUserIds?: string[];
   comments: DiscussionComment[];
+}
+
+export interface DiscussionFilterParams {
+  categorySlug?: string;
+  filter?: 'all' | 'latest' | 'popular' | 'unanswered' | 'solved' | 'saved' | 'my-discussions' | 'watched';
+  search?: string;
+  tag?: string;
+  page?: number;
+  limit?: number;
+  userId?: string;
+}
+
+export interface PaginatedDiscussionsResult {
+  threads: DiscussionPost[];
+  totalCount: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+}
+
+export interface PaginatedThreadPostsResult {
+  thread: DiscussionPost;
+  posts: DiscussionComment[];
+  totalPosts: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+}
+
+export interface CreateDiscussionRequest {
+  title: string;
+  content: string;
+  categoryId: string;
+  tags: string[];
+  codeSnippet?: { language: string; code: string };
+  author: ForumAuthor;
+}
+
+export interface CreateReplyRequest {
+  content: string;
+  author: ForumAuthor;
+  replyToPostNumber?: number;
+  replyToAuthor?: string;
+}
+
+export interface ModerationActionRequest {
+  action: 'lock' | 'unlock' | 'pin' | 'unpin' | 'delete' | 'mark_solved' | 'unmark_solved';
+  reason?: string;
 }
 
 export interface Contest {

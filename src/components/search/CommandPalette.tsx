@@ -73,7 +73,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     u.username.toLowerCase().includes(cleanQuery)
   ).slice(0, 3);
 
-  const matchingDiscussions = ForumService.getThreads().filter(d =>
+  const matchingDiscussions = ForumService.getThreads().threads.filter(d =>
     !cleanQuery ||
     d.title.toLowerCase().includes(cleanQuery) ||
     d.tags?.some(t => t.toLowerCase().includes(cleanQuery))

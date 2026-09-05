@@ -1,4 +1,4 @@
-import { ForumSection, ForumCategory, DiscussionPost } from '../types';
+import type { ForumSection, ForumCategory, DiscussionPost } from '../types/index.ts';
 
 export const FORUM_CATEGORIES: ForumCategory[] = [
   // LEARN & PRACTICE

@@ -70,11 +70,11 @@ export function App() {
     }
   }, [currentUser?.id]);
 
-  // Section 12: Protected Routes list
+  // Section 12: Protected Routes list (Discussions allows public reading)
   const protectedViews = [
     'dashboard', 'problems', 'workspace', 'roadmaps', 
     'patterns', 'profile', 'settings', 'submissions', 
-    'contests', 'discuss', 'leaderboard', 'admin',
+    'contests', 'leaderboard', 'admin',
     'saved', 'saved-problems'
   ];
 
@@ -85,6 +85,24 @@ export function App() {
       handleOpenAuth('login');
     }
   }, [isLoggedIn, currentView]);
+
+  // Sync URL popstate for discussions
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith('/discussions')) {
+        const parts = pathname.split('/').filter(Boolean);
+        if (parts.length > 1) {
+          setActiveDiscussionId(parts[1]);
+        } else {
+          setActiveDiscussionId(undefined);
+        }
+        setCurrentView('discuss');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Global navigation handler
   const handleNavigate = (view: string, param?: string) => {
@@ -115,8 +133,13 @@ export function App() {
     } else if (view === 'saved' || view === 'saved-problems') {
       setCurrentView('saved-problems');
     } else if (view === 'discuss') {
-      if (param) setActiveDiscussionId(param);
-      else setActiveDiscussionId(undefined);
+      if (param) {
+        setActiveDiscussionId(param);
+        try { window.history.pushState(null, '', `/discussions/${param}`); } catch {}
+      } else {
+        setActiveDiscussionId(undefined);
+        try { window.history.pushState(null, '', '/discussions'); } catch {}
+      }
       setCurrentView('discuss');
     } else {
       setCurrentView(view);
@@ -326,12 +349,13 @@ export function App() {
           />
         )}
 
-        {currentView === 'discuss' && currentUser && (
+        {currentView === 'discuss' && (
           <DiscussionsView
             currentUser={currentUser}
             initialDiscussionId={activeDiscussionId}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
+            onRequireAuth={() => handleOpenAuth('login')}
           />
         )}
 
