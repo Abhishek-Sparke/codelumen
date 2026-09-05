@@ -368,16 +368,28 @@ export const ProblemDatabase = {
   },
 
   /**
-   * Computes the recommended next problem
+   * Computes the recommended next problem following the exact 5-tier hierarchy:
+   * 1. Next required roadmap problem (unsolved)
+   * 2. Same topic (unsolved)
+   * 3. Same pattern (unsolved)
+   * 4. Appropriate difficulty (unsolved)
+   * 5. Fallback: Any unsolved problem
    */
   getRecommendedNextProblem(currentProblemId: string, userId?: string): Problem | undefined {
     const current = this.getProblemById(currentProblemId);
     const userProgressMap = userId ? StorageService.getAllUserProblemProgress(userId) : {};
+    const currentUser = StorageService.getCurrentUser();
+    const solvedIds = currentUser?.solvedProblemIds || [];
+
+    const isUnsolved = (pid: string) => 
+      pid !== currentProblemId && 
+      userProgressMap[pid]?.status !== 'solved' && 
+      !solvedIds.includes(pid);
 
     // 1. Next problem in the same roadmap section that is unsolved
-    for (const [secId, pids] of Object.entries(ROADMAP_PROBLEMS_MAPPING)) {
+    for (const [_secId, pids] of Object.entries(ROADMAP_PROBLEMS_MAPPING)) {
       if (pids.includes(currentProblemId)) {
-        const nextInSec = pids.find(pid => pid !== currentProblemId && userProgressMap[pid]?.status !== 'solved');
+        const nextInSec = pids.find(pid => isUnsolved(pid));
         if (nextInSec) {
           const p = this.getProblemById(nextInSec);
           if (p) return p;
@@ -385,20 +397,35 @@ export const ProblemDatabase = {
       }
     }
 
-    // 2. Next problem of the same pattern
+    // 2. Same topic (unsolved)
+    if (current) {
+      const nextTopic = ALL_PROBLEMS.find(p => 
+        isUnsolved(p.id) && 
+        p.topic.toLowerCase() === current.topic.toLowerCase()
+      );
+      if (nextTopic) return nextTopic;
+    }
+
+    // 3. Same pattern (unsolved)
     if (current) {
       const nextPattern = ALL_PROBLEMS.find(p => 
-        p.id !== currentProblemId && 
-        p.pattern.toLowerCase() === current.pattern.toLowerCase() &&
-        userProgressMap[p.id]?.status !== 'solved'
+        isUnsolved(p.id) && 
+        p.pattern.toLowerCase() === current.pattern.toLowerCase()
       );
       if (nextPattern) return nextPattern;
     }
 
-    // 3. Any unsolved problem
-    const fallback = ALL_PROBLEMS.find(p => 
-      p.id !== currentProblemId && userProgressMap[p.id]?.status !== 'solved'
-    );
-    return fallback || ALL_PROBLEMS[0];
+    // 4. Same difficulty (unsolved)
+    if (current) {
+      const nextDiff = ALL_PROBLEMS.find(p => 
+        isUnsolved(p.id) && 
+        p.difficulty === current.difficulty
+      );
+      if (nextDiff) return nextDiff;
+    }
+
+    // 5. Fallback: Any unsolved problem
+    const fallback = ALL_PROBLEMS.find(p => isUnsolved(p.id));
+    return fallback || ALL_PROBLEMS.find(p => p.id !== currentProblemId) || ALL_PROBLEMS[0];
   }
 };

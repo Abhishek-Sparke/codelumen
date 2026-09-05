@@ -203,12 +203,12 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
       onSolveProblem(problem.id, xpVal);
 
       // Determine next problem recommendation
-      if (result.nextRecommendedProblem) {
+      const rec = ProblemDatabase.getRecommendedNextProblem(problem.id, currentUser.id);
+      if (rec) {
+        setNextProblem(rec);
+      } else if (result.nextRecommendedProblem) {
         const found = ALL_PROBLEMS.find(p => p.id === result.nextRecommendedProblem?.id);
         if (found) setNextProblem(found);
-      } else if (relatedProblems.length > 0) {
-        const cand = ALL_PROBLEMS.find(p => p.id === relatedProblems[0].id);
-        if (cand) setNextProblem(cand);
       }
 
       if (wasFirstSolve) {
