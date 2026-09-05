@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Problem, Difficulty } from '../../types';
 import { ALL_PROBLEMS } from '../../data/problems';
-import { SAMPLE_USERS } from '../../data/users';
+import { StorageService } from '../../services/storage';
 
 interface AdminViewProps {
   onNavigateProblem: (problemId: string) => void;
@@ -18,6 +18,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [activeTab, setActiveTab] = useState<'problems' | 'users' | 'analytics'>('problems');
   const [isCreatingProblem, setIsCreatingProblem] = useState(false);
   const [successNotice, setSuccessNotice] = useState('');
+  const registeredUsers = StorageService.getAllUsers();
 
   // Form states for problem creation
   const [newTitle, setNewTitle] = useState('');
@@ -170,7 +171,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       <div className="flex items-center gap-2 border-b border-white/[0.08] pb-3 text-xs font-medium">
         {[
           { id: 'problems', label: `Manage Problems (${problems.length})` },
-          { id: 'users', label: `User Accounts (${SAMPLE_USERS.length})` },
+          { id: 'users', label: `User Accounts (${registeredUsers.length})` },
           { id: 'analytics', label: 'Platform Telemetry' },
         ].map((t) => (
           <button
@@ -261,35 +262,43 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
-                {SAMPLE_USERS.map((user) => (
-                  <tr key={user.id} className="hover:bg-white/[0.03]">
-                    <td className="py-4 pl-6 pr-4">
-                      <div className="flex items-center gap-3">
-                        <img src={user.avatar} alt={user.name} className="h-7 w-7 rounded-full object-cover" />
-                        <div>
-                          <span className="font-semibold text-white">{user.name}</span>
-                          <span className="block text-[11px] text-white/40">@{user.username}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 font-mono text-white/60 text-[11px]">
-                      {user.email}
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        user.role === 'admin' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/5 text-white/60'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 font-mono font-bold text-cyan-400">
-                      {user.xp} XP
-                    </td>
-                    <td className="py-4 pr-6 pl-4 text-right text-white/40 text-[11px]">
-                      {user.joinedDate}
+                {registeredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-white/40">
+                      No registered user accounts found in database yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  registeredUsers.map((user) => (
+                    <tr key={user.id} className="hover:bg-white/[0.03]">
+                      <td className="py-4 pl-6 pr-4">
+                        <div className="flex items-center gap-3">
+                          <img src={user.avatar} alt={user.name} className="h-7 w-7 rounded-full object-cover" />
+                          <div>
+                            <span className="font-semibold text-white">{user.name}</span>
+                            <span className="block text-[11px] text-white/40">@{user.username}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-mono text-white/60 text-[11px]">
+                        {user.email}
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          user.role === 'admin' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/5 text-white/60'
+                        }`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 font-mono font-bold text-cyan-400">
+                        {user.xp} XP
+                      </td>
+                      <td className="py-4 pr-6 pl-4 text-right text-white/40 text-[11px]">
+                        {user.joinedDate}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

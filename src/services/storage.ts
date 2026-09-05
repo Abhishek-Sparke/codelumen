@@ -4,7 +4,6 @@ import {
   UserProblemProgressRecord, SavedProblemRecord, SubmissionRecord, SubmissionDraftRecord,
   XpTransactionRecord, UserActivityRecord, SupportedLanguage
 } from '../types';
-import { SAMPLE_USERS } from '../data/users';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { calculateLevel } from '../data/badges';
 
@@ -505,15 +504,19 @@ export const StorageService = {
 
   getAllUsers(): UserProfile[] {
     const accounts = this.getAuthAccounts();
-    const registeredUsers = accounts.map(a => a.user);
-    return registeredUsers.length > 0 ? registeredUsers : SAMPLE_USERS;
+    const registeredUsers = accounts.map(a => a.user).filter(Boolean);
+    const current = this.getCurrentUser();
+    if (current && !registeredUsers.some(u => u.id === current.id)) {
+      registeredUsers.unshift(current);
+    }
+    return registeredUsers;
   },
 
   getUserById(id: string): UserProfile | null {
     const current = this.getCurrentUser();
     if (current && (id === current.id || id === 'user-current')) return current;
     const all = this.getAllUsers();
-    return all.find(u => u.id === id) || current;
+    return all.find(u => u.id === id) || (id === current?.id ? current : null);
   },
 
   toggleFollowUser(targetUserId: string): { isFollowing: boolean; current: UserProfile | null } {

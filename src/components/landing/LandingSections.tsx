@@ -4,15 +4,19 @@ import {
   Layers, CheckCircle, Sparkles, TrendingUp
 } from 'lucide-react';
 import { PATTERNS_DATA } from '../../data/patterns';
-import { SAMPLE_USERS } from '../../data/users';
+import { ALL_PROBLEMS } from '../../data/problems';
+import { StorageService } from '../../services/storage';
+import { UserProfile } from '../../types';
 
 interface LandingSectionsProps {
+  currentUser?: UserProfile | null;
   onStartCoding: () => void;
   onExploreRoadmap: () => void;
   onSelectPattern: (patternId: string) => void;
 }
 
 export const LandingSections: React.FC<LandingSectionsProps> = ({
+  currentUser,
   onStartCoding,
   onExploreRoadmap,
   onSelectPattern
@@ -47,6 +51,30 @@ export const LandingSections: React.FC<LandingSectionsProps> = ({
       gradient: 'from-purple-500/20 to-transparent'
     }
   ];
+
+  // Real authenticated or fresh learner telemetry
+  const solvedProblemIds = currentUser?.solvedProblemIds || [];
+  const solvedCount = solvedProblemIds.length;
+  const streak = currentUser?.streak || 0;
+  const longestStreak = currentUser?.longestStreak || 0;
+  const rankLabel = currentUser?.globalRank ? `#${currentUser.globalRank}` : 'Unrated';
+  const rankSubtitle = currentUser?.globalRank ? 'Active Ranking' : (solvedCount === 0 ? 'Day 1 Ready' : 'Rising Star');
+
+  // Breakdown across 75 problems (25 Easy, 35 Medium, 15 Hard)
+  const easyTotal = 25;
+  const mediumTotal = 35;
+  const hardTotal = 15;
+
+  const easySolved = ALL_PROBLEMS.filter(p => p.difficulty === 'Easy' && solvedProblemIds.includes(p.id)).length;
+  const mediumSolved = ALL_PROBLEMS.filter(p => p.difficulty === 'Medium' && solvedProblemIds.includes(p.id)).length;
+  const hardSolved = ALL_PROBLEMS.filter(p => p.difficulty === 'Hard' && solvedProblemIds.includes(p.id)).length;
+
+  const easyPercent = Math.round((easySolved / easyTotal) * 100);
+  const mediumPercent = Math.round((mediumSolved / mediumTotal) * 100);
+  const hardPercent = Math.round((hardSolved / hardTotal) * 100);
+
+  // Active users strictly from logged-in database accounts
+  const activeAccounts = StorageService.getAllUsers();
 
   return (
     <div className="space-y-28 sm:space-y-36 pb-24">
@@ -179,21 +207,25 @@ export const LandingSections: React.FC<LandingSectionsProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
                   <span className="text-[11px] text-white/40">Solved</span>
-                  <p className="font-display text-2xl font-bold text-white mt-1">142</p>
-                  <span className="text-[10px] text-emerald-400 font-semibold">+8 this week</span>
+                  <p className="font-display text-2xl font-bold text-white mt-1">{solvedCount}</p>
+                  <span className="text-[10px] text-emerald-400 font-semibold">
+                    {solvedCount === 0 ? 'Start from Problem 1' : `+${solvedCount} solved`}
+                  </span>
                 </div>
                 <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
                   <span className="text-[11px] text-white/40">Active Streak</span>
                   <p className="font-display text-2xl font-bold text-amber-400 mt-1 flex items-center gap-1">
                     <Flame className="h-5 w-5 fill-amber-400" />
-                    18 Days
+                    {streak} {streak === 1 ? 'Day' : 'Days'}
                   </p>
-                  <span className="text-[10px] text-white/40">Longest: 24 days</span>
+                  <span className="text-[10px] text-white/40">
+                    {streak === 0 ? 'Start your streak today' : `Longest: ${longestStreak} days`}
+                  </span>
                 </div>
                 <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
                   <span className="text-[11px] text-white/40">Global Rank</span>
-                  <p className="font-display text-2xl font-bold text-white mt-1">#342</p>
-                  <span className="text-[10px] text-amber-400/80 font-semibold">Top 2.5%</span>
+                  <p className="font-display text-2xl font-bold text-white mt-1">{rankLabel}</p>
+                  <span className="text-[10px] text-amber-400/80 font-semibold">{rankSubtitle}</span>
                 </div>
               </div>
 
@@ -203,31 +235,31 @@ export const LandingSections: React.FC<LandingSectionsProps> = ({
                 
                 <div>
                   <div className="flex justify-between text-xs text-white/60 mb-1">
-                    <span className="text-emerald-400 font-medium">Easy (68 / 80)</span>
-                    <span>85%</span>
+                    <span className="text-emerald-400 font-medium">Easy ({easySolved} / {easyTotal})</span>
+                    <span>{easyPercent}%</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-emerald-400 rounded-full w-[85%]" />
+                    <div className="h-full bg-emerald-400 rounded-full transition-all duration-500" style={{ width: `${easyPercent}%` }} />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex justify-between text-xs text-white/60 mb-1">
-                    <span className="text-amber-400 font-medium">Medium (58 / 100)</span>
-                    <span>58%</span>
+                    <span className="text-amber-400 font-medium">Medium ({mediumSolved} / {mediumTotal})</span>
+                    <span>{mediumPercent}%</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-amber-400 rounded-full w-[58%]" />
+                    <div className="h-full bg-amber-400 rounded-full transition-all duration-500" style={{ width: `${mediumPercent}%` }} />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex justify-between text-xs text-white/60 mb-1">
-                    <span className="text-rose-400 font-medium">Hard (16 / 40)</span>
-                    <span>40%</span>
+                    <span className="text-rose-400 font-medium">Hard ({hardSolved} / {hardTotal})</span>
+                    <span>{hardPercent}%</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-rose-400 rounded-full w-[40%]" />
+                    <div className="h-full bg-rose-400 rounded-full transition-all duration-500" style={{ width: `${hardPercent}%` }} />
                   </div>
                 </div>
               </div>
@@ -295,22 +327,30 @@ export const LandingSections: React.FC<LandingSectionsProps> = ({
                 Join our peer-driven community. Review optimal solutions, share your algorithmic write-ups, and compete on the global leaderboard.
               </p>
 
-              {/* Sample User Avatars */}
-              <div className="mt-6 flex items-center gap-3">
-                <div className="flex -space-x-2 overflow-hidden">
-                  {SAMPLE_USERS.slice(0, 5).map(u => (
-                    <img
-                      key={u.id}
-                      src={u.avatar}
-                      alt={u.name}
-                      className="inline-block h-9 w-9 rounded-full ring-2 ring-[#0c0c11] object-cover"
-                    />
-                  ))}
+              {/* Real Active User Accounts from Database */}
+              {activeAccounts.length > 0 ? (
+                <div className="mt-6 flex items-center gap-3">
+                  <div className="flex -space-x-2 overflow-hidden">
+                    {activeAccounts.slice(0, 5).map(u => (
+                      <img
+                        key={u.id}
+                        src={u.avatar}
+                        alt={u.name}
+                        title={u.name}
+                        className="inline-block h-9 w-9 rounded-full ring-2 ring-[#0c0c11] object-cover bg-amber-500/10"
+                      />
+                    ))}
+                  </div>
+                  <div className="text-xs text-white/60">
+                    <strong className="text-white">{activeAccounts.length}</strong> active practicing engineer{activeAccounts.length === 1 ? '' : 's'}
+                  </div>
                 </div>
-                <div className="text-xs text-white/60">
-                  <strong className="text-white">10,000+</strong> active practicing engineers
+              ) : (
+                <div className="mt-6 flex items-center gap-2 text-xs text-white/50">
+                  <Users className="h-4 w-4 text-purple-400/60" />
+                  <span>Be the first engineer to start deliberate practice.</span>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/[0.06] text-[11px] text-white/40 flex items-center justify-between">

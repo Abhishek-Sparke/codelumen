@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Trophy, Flame, CheckCircle2, Award, Sparkles, Crown } from 'lucide-react';
 import { UserProfile } from '../../types';
-import { SAMPLE_USERS } from '../../data/users';
+import { StorageService } from '../../services/storage';
 
 interface LeaderboardViewProps {
   currentUser: UserProfile;
@@ -14,18 +14,19 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 }) => {
   const [scope, setScope] = useState<'global' | 'weekly' | 'monthly' | 'friends'>('global');
 
-  // Filter or sort users
-  const allUsers = [...SAMPLE_USERS];
+  // Filter or sort real registered accounts
+  const allUsers = StorageService.getAllUsers();
   
   const filteredUsers = allUsers.filter(u => {
     if (scope === 'friends') {
-      return currentUser.followingIds.includes(u.id) || u.id === currentUser.id;
+      return (currentUser.followingIds || []).includes(u.id) || u.id === currentUser.id;
     }
     return true;
-  }).sort((a, b) => b.xp - a.xp);
+  }).sort((a, b) => (b.xp || 0) - (a.xp || 0));
 
-  const topThree = filteredUsers.slice(0, 3);
-  const remainingUsers = filteredUsers.slice(3);
+  const topThree = filteredUsers.length >= 3 ? filteredUsers.slice(0, 3) : [];
+  const displayTableUsers = topThree.length >= 3 ? filteredUsers.slice(3) : filteredUsers;
+  const baseRank = topThree.length >= 3 ? 4 : 1;
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
@@ -137,64 +138,73 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         </div>
       )}
 
-      {/* REMAINING USERS TABLE */}
-      <div className="glass-panel overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0b0b10]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-white/[0.08] bg-[#0e0e14] text-[11px] font-semibold text-white/50 uppercase tracking-wider">
-              <tr>
-                <th className="py-3.5 pl-6 pr-4 w-16 text-center">Rank</th>
-                <th className="py-3.5 px-4">User</th>
-                <th className="py-3.5 px-4">XP Score</th>
-                <th className="py-3.5 px-4">Solved</th>
-                <th className="py-3.5 pr-6 pl-4 text-right">Streak</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.04]">
-              {remainingUsers.map((user, idx) => {
-                const rank = idx + 4;
-                const isCurrent = user.id === currentUser.id;
-
-                return (
-                  <tr
-                    key={user.id}
-                    onClick={() => onNavigateProfile(user.id)}
-                    className={`cursor-pointer transition-colors ${
-                      isCurrent ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <td className="py-4 pl-6 pr-4 text-center font-mono font-bold text-white/50">
-                      #{rank}
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-3">
-                        <img src={user.avatar} alt={user.name} className="h-7 w-7 rounded-full object-cover" />
-                        <div>
-                          <span className="font-semibold text-white">{user.name}</span>
-                          <span className="block text-[11px] text-white/40">@{user.username} · {user.levelTitle}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 font-mono font-bold text-cyan-400">
-                      {user.xp} XP
-                    </td>
-                    <td className="py-4 px-4 font-mono text-white/70">
-                      {user.solvedProblemIds.length} problems
-                    </td>
-                    <td className="py-4 pr-6 pl-4 text-right">
-                      <span className="inline-flex items-center gap-1 font-mono text-amber-400">
-                        <Flame className="h-3.5 w-3.5 fill-amber-400" />
-                        {user.streak}d
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {/* USERS TABLE */}
+      {filteredUsers.length === 0 ? (
+        <div className="glass-panel rounded-3xl border border-white/[0.08] p-12 text-center space-y-3">
+          <Trophy className="mx-auto h-12 w-12 text-amber-400/30" />
+          <h3 className="text-base font-bold text-white">No ranked engineers yet</h3>
+          <p className="text-xs text-white/50 max-w-sm mx-auto">
+            Solve your first challenge to claim #1 on the CodeSpark leaderboard.
+          </p>
         </div>
-      </div>
+      ) : displayTableUsers.length > 0 ? (
+        <div className="glass-panel overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0b0b10]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-white/[0.08] bg-[#0e0e14] text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                <tr>
+                  <th className="py-3.5 pl-6 pr-4 w-16 text-center">Rank</th>
+                  <th className="py-3.5 px-4">User</th>
+                  <th className="py-3.5 px-4">XP Score</th>
+                  <th className="py-3.5 px-4">Solved</th>
+                  <th className="py-3.5 pr-6 pl-4 text-right">Streak</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.04]">
+                {displayTableUsers.map((user, idx) => {
+                  const rank = baseRank + idx;
+                  const isCurrent = user.id === currentUser.id;
 
+                  return (
+                    <tr
+                      key={user.id}
+                      onClick={() => onNavigateProfile(user.id)}
+                      className={`cursor-pointer transition-colors ${
+                        isCurrent ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <td className="py-4 pl-6 pr-4 text-center font-mono font-bold text-white/50">
+                        #{rank}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-3">
+                          <img src={user.avatar} alt={user.name} className="h-7 w-7 rounded-full object-cover bg-amber-500/10" />
+                          <div>
+                            <span className="font-semibold text-white">{user.name}</span>
+                            <span className="block text-[11px] text-white/40">@{user.username} · {user.levelTitle}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-mono font-bold text-cyan-400">
+                        {user.xp} XP
+                      </td>
+                      <td className="py-4 px-4 font-mono text-white/70">
+                        {user.solvedProblemIds.length} problems
+                      </td>
+                      <td className="py-4 pr-6 pl-4 text-right">
+                        <span className="inline-flex items-center gap-1 font-mono text-amber-400">
+                          <Flame className="h-3.5 w-3.5 fill-amber-400" />
+                          {user.streak}d
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

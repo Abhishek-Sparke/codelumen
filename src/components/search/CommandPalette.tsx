@@ -3,7 +3,7 @@ import { Search, X, Code, Sparkles, Map, User, MessageSquare, ArrowRight } from 
 import { ALL_PROBLEMS } from '../../data/problems';
 import { PATTERNS_DATA } from '../../data/patterns';
 import { ROADMAP_STAGES } from '../../data/roadmaps';
-import { SAMPLE_USERS } from '../../data/users';
+import { StorageService } from '../../services/storage';
 import { SAMPLE_DISCUSSIONS } from '../../data/discussions';
 
 interface CommandPaletteProps {
@@ -67,7 +67,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     r.topic.toLowerCase().includes(cleanQuery)
   ).slice(0, 3);
 
-  const matchingUsers = SAMPLE_USERS.filter(u =>
+  const matchingUsers = StorageService.getAllUsers().filter(u =>
     !cleanQuery ||
     u.name.toLowerCase().includes(cleanQuery) ||
     u.username.toLowerCase().includes(cleanQuery)

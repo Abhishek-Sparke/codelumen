@@ -233,6 +233,7 @@ export function App() {
               }}
             />
             <LandingSections
+              currentUser={currentUser}
               onStartCoding={() => {
                 if (isLoggedIn) handleNavigate('problems');
                 else handleOpenAuth('signup');
