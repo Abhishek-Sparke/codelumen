@@ -315,13 +315,6 @@ export const StorageService = {
     this.saveCurrentUser(newUser);
     this.setAuthenticated(true);
 
-    this.addNotification({
-      title: 'Welcome to CodeSpark ⚡',
-      message: 'Your account is ready. Pick your starting roadmap and begin deliberate practice.',
-      type: 'milestone',
-      linkUrl: '/roadmaps'
-    }, userId);
-
     return { success: true, user: newUser };
   },
 
@@ -961,14 +954,16 @@ export const StorageService = {
 
   getNotifications(userId?: string): NotificationItem[] {
     try {
+      // Unconditionally remove legacy global key that contained demo notifications
+      try {
+        localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
+      } catch {}
+
       const user = userId ? { id: userId } : this.getCurrentUser();
-      const userKey = user ? `${STORAGE_KEYS.NOTIFICATIONS}_${user.id}` : null;
-      
-      // Check user-scoped notifications first, then fallback to global key
-      let data = userKey ? localStorage.getItem(userKey) : null;
-      if (!data) {
-        data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      }
+      if (!user) return [];
+
+      const userKey = `${STORAGE_KEYS.NOTIFICATIONS}_${user.id}`;
+      const data = localStorage.getItem(userKey);
 
       if (data) {
         const parsed: NotificationItem[] = JSON.parse(data);
@@ -976,26 +971,29 @@ export const StorageService = {
         const filtered = parsed.filter(n => {
           const msg = (n.message || '').toLowerCase();
           const title = (n.title || '').toLowerCase();
+          const id = (n.id || '').toLowerCase();
           return (
+            !title.includes('daily challenge') &&
+            !title.includes('biweekly contest') &&
+            !title.includes('badge unlocked') &&
+            !title.includes('new follower') &&
+            !msg.includes('longest consecutive') &&
+            !msg.includes('algorithmic focus') &&
             !msg.includes('devon') &&
             !msg.includes('18 consecutive') &&
             !msg.includes('sprint #48') &&
             !msg.includes('speed solver') &&
-            !title.includes('biweekly contest') &&
-            !n.id.startsWith('notif-2') &&
-            !n.id.startsWith('notif-3') &&
-            !n.id.startsWith('notif-4')
+            id !== 'notif-1' &&
+            id !== 'notif-2' &&
+            id !== 'notif-3' &&
+            id !== 'notif-4' &&
+            !id.startsWith('logout-')
           );
         });
 
         // Save sanitized list back
-        const targetKey = userKey || STORAGE_KEYS.NOTIFICATIONS;
         if (filtered.length !== parsed.length) {
-          localStorage.setItem(targetKey, JSON.stringify(filtered));
-          // Clean the old global key if it has demo items
-          if (userKey && localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
-            localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
-          }
+          localStorage.setItem(userKey, JSON.stringify(filtered));
         }
         return filtered;
       }

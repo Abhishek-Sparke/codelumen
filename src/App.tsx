@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile } from './types';
+import { UserProfile, NotificationItem } from './types';
 import { StorageService } from './services/storage';
 import { ALL_PROBLEMS } from './data/problems';
 
@@ -43,7 +43,10 @@ export function App() {
   const [activePatternId, setActivePatternId] = useState<string>('two-pointers');
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
-  const [notifications, setNotifications] = useState(() => StorageService.getNotifications());
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const user = StorageService.getCurrentUser();
+    return user ? StorageService.getNotifications(user.id) : [];
+  });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup' | 'forgot'>('login');
