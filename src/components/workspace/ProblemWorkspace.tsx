@@ -15,6 +15,7 @@ import { ALL_PROBLEMS } from '../../data/problems';
 import { AICoachPanel } from './AICoachPanel';
 import { EditorialTab } from './EditorialTab';
 import { FirstSolveModal } from './FirstSolveModal';
+import { FeatureFlagService } from '../../services/featureFlags';
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -68,6 +69,10 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   const [selectedSubmissionView, setSelectedSubmissionView] = useState<Submission | null>(null);
   const [solveXpEarned, setSolveXpEarned] = useState<number>(100);
   const [nextProblem, setNextProblem] = useState<Problem | null>(null);
+
+  // Feature flag status checks for rollback and resilience
+  const isExecutionEnabled = FeatureFlagService.getFlag('CODE_EXECUTION_ENABLED');
+  const isAiEnabled = FeatureFlagService.getFlag('SPARK_AI_ENABLED');
 
   // Restore draft when problem or language changes
   useEffect(() => {
@@ -283,14 +288,16 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
         >
           Code Editor
         </button>
-        <button
-          onClick={() => setMobileTab('aicoach')}
-          className={`px-3 py-1.5 rounded-lg font-medium ${
-            mobileTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300' : 'text-white/50'
-          }`}
-        >
-          Spark AI
-        </button>
+        {isAiEnabled && (
+          <button
+            onClick={() => setMobileTab('aicoach')}
+            className={`px-3 py-1.5 rounded-lg font-medium ${
+              mobileTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300' : 'text-white/50'
+            }`}
+          >
+            Spark AI
+          </button>
+        )}
       </div>
 
       {/* Main Split Grid */}
@@ -324,15 +331,17 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                 <span>Editorial</span>
               </button>
 
-              <button
-                onClick={() => setActiveLeftTab('aicoach')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
-                  activeLeftTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300 font-semibold' : 'text-white/50 hover:text-white'
-                }`}
-              >
-                <Bot className="h-3.5 w-3.5 text-amber-400" />
-                <span>Spark AI</span>
-              </button>
+              {isAiEnabled && (
+                <button
+                  onClick={() => setActiveLeftTab('aicoach')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                    activeLeftTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300 font-semibold' : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  <Bot className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Spark AI</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveLeftTab('submissions')}
@@ -647,9 +656,10 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               {/* Run button */}
               <button
                 onClick={handleRunCode}
-                disabled={isRunning || isSubmitting}
+                disabled={isRunning || isSubmitting || !isExecutionEnabled}
+                title={!isExecutionEnabled ? 'Code execution is temporarily unavailable' : 'Run tests (Ctrl+Enter)'}
                 className={`flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/10 active:scale-95 transition-all ${
-                  isRunning ? 'opacity-70 cursor-not-allowed' : ''
+                  isRunning || !isExecutionEnabled ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 <Play className={`h-3 w-3 fill-white ${isRunning ? 'animate-pulse' : ''}`} />
@@ -659,9 +669,10 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               {/* Submit button */}
               <button
                 onClick={handleSubmitSolution}
-                disabled={isRunning || isSubmitting}
+                disabled={isRunning || isSubmitting || !isExecutionEnabled}
+                title={!isExecutionEnabled ? 'Code execution is temporarily unavailable' : 'Submit solution (Ctrl+Shift+Enter)'}
                 className={`flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-1.5 text-xs font-bold text-black shadow-md shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all ${
-                  isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+                  isSubmitting || !isExecutionEnabled ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 <Send className="h-3 w-3 fill-black" />
@@ -759,6 +770,12 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
 
             {/* Panel Body */}
             <div className="flex-1 overflow-y-auto p-4 text-xs font-mono">
+              {!isExecutionEnabled && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 mb-3 text-xs text-amber-300 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-400 shrink-0" />
+                  <span>Code execution is temporarily unavailable. Problem description, hints, and draft autosave remain operational.</span>
+                </div>
+              )}
               
               {/* TAB 1: TEST CASES */}
               {bottomTab === 'testcases' && (
@@ -839,16 +856,18 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                       {/* Action buttons on failure */}
                       {executionResult && executionResult.status !== 'Accepted' && (
                         <div className="flex items-center gap-2 pt-1">
-                          <button
-                            onClick={() => {
-                              setActiveLeftTab('aicoach');
-                              setMobileTab('aicoach');
-                            }}
-                            className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 font-semibold hover:bg-amber-500/20 transition-colors"
-                          >
-                            <Bot className="h-3 w-3 text-amber-400" />
-                            <span>Ask Spark AI</span>
-                          </button>
+                          {isAiEnabled && (
+                            <button
+                              onClick={() => {
+                                setActiveLeftTab('aicoach');
+                                setMobileTab('aicoach');
+                              }}
+                              className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 font-semibold hover:bg-amber-500/20 transition-colors"
+                            >
+                              <Bot className="h-3 w-3 text-amber-400" />
+                              <span>Ask Spark AI</span>
+                            </button>
+                          )}
                           {problem.hints.length > 0 && revealedHintCount === 0 && (
                             <button
                               onClick={() => {
