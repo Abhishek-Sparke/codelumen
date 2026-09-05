@@ -76,7 +76,22 @@ export async function handleCodeSubmit(body: {
   code: string;
   user_id: string;
 }) {
-  const { problem_id, language, code } = body;
+  const { problem_id, language, code, user_id } = body;
+
+  if (!user_id) {
+    return {
+      success: false,
+      status: 'SYSTEM_ERROR',
+      runtime_ms: 0,
+      memory_kb: 0,
+      total_test_cases: 0,
+      passed_test_cases: 0,
+      test_results: [],
+      submission_id: '',
+      job_id: '',
+      error_message: 'Unauthorized: user_id is required for submissions.'
+    };
+  }
 
   const allCases = getAllTestCasesForSubmit(problem_id);
   if (!allCases || allCases.length === 0) {

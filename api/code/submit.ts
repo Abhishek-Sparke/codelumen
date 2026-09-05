@@ -6,6 +6,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error_message: 'Method not allowed' });
   }
 
+  if (!req.body?.user_id) {
+    return res.status(401).json({ success: false, status: 'SYSTEM_ERROR', error_message: 'Unauthorized: user_id is required' });
+  }
+
   try {
     const result = await handleCodeSubmit(req.body);
     return res.status(200).json(result);

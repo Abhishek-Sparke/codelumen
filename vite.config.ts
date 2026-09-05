@@ -23,6 +23,11 @@ function codesparkExecutionPlugin(): Plugin {
                 res.statusCode = 200;
                 res.end(JSON.stringify(result));
               } else if (url === '/api/code/submit') {
+                if (!body.user_id) {
+                  res.statusCode = 401;
+                  res.end(JSON.stringify({ success: false, status: 'SYSTEM_ERROR', error_message: 'Unauthorized: user_id is required' }));
+                  return;
+                }
                 const result = await handleCodeSubmit(body);
                 res.statusCode = 200;
                 res.end(JSON.stringify(result));
