@@ -473,3 +473,119 @@ export interface UserActivityRecord {
   created_at: string;
 }
 
+// =============================================================================
+// PHASE 3 REAL EXECUTION & SUBMISSION SYSTEM TYPES
+// =============================================================================
+
+export type NormalizedJudgeVerdict = 
+  | 'ACCEPTED'
+  | 'WRONG_ANSWER'
+  | 'TIME_LIMIT_EXCEEDED'
+  | 'MEMORY_LIMIT_EXCEEDED'
+  | 'RUNTIME_ERROR'
+  | 'COMPILATION_ERROR'
+  | 'SYSTEM_ERROR'
+  | 'OUTPUT_LIMIT_EXCEEDED';
+
+export interface ProblemTestCaseRecord {
+  id: string;
+  problem_id: string;
+  input: any[] | string;
+  expected_output: any;
+  is_public: boolean;
+  position: number;
+  created_at: string;
+}
+
+export type ExecutionJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface ExecutionJobRecord {
+  id: string;
+  submission_id?: string;
+  status: ExecutionJobStatus;
+  provider: string;
+  started_at: string;
+  completed_at?: string;
+  error_code?: string;
+  created_at: string;
+}
+
+export interface TestCaseExecutionResult {
+  passed: boolean;
+  testCaseId: string;
+  position: number;
+  isPublic: boolean;
+  input?: any; // Only provided for public test cases
+  expectedOutput?: any; // Only provided for public test cases
+  actualOutput?: any; // Output from user program (masked for hidden if failed)
+  runtimeMs: number;
+  memoryKb?: number;
+  errorMessage?: string;
+}
+
+export interface NormalizedExecutionResult {
+  status: NormalizedJudgeVerdict;
+  runtime_ms: number;
+  memory_kb: number;
+  total_test_cases: number;
+  passed_test_cases: number;
+  test_results: TestCaseExecutionResult[];
+  compile_output?: string;
+  error_message?: string;
+  stdout?: string;
+  stderr?: string;
+  job_id?: string;
+}
+
+export interface CodeRunRequest {
+  problem_id: string;
+  language: SupportedLanguage;
+  code: string;
+}
+
+export interface CodeRunResponse {
+  success: boolean;
+  status: NormalizedJudgeVerdict;
+  runtime_ms: number;
+  memory_kb: number;
+  total_test_cases: number;
+  passed_test_cases: number;
+  test_results: TestCaseExecutionResult[];
+  stdout?: string;
+  stderr?: string;
+  error_message?: string;
+}
+
+export interface CodeSubmitRequest {
+  problem_id: string;
+  language: SupportedLanguage;
+  code: string;
+  user_id: string;
+}
+
+export interface CodeSubmitResponse {
+  success: boolean;
+  status: NormalizedJudgeVerdict;
+  runtime_ms: number;
+  memory_kb: number;
+  total_test_cases: number;
+  passed_test_cases: number;
+  test_results: TestCaseExecutionResult[];
+  stdout?: string;
+  stderr?: string;
+  error_message?: string;
+  submission_id: string;
+  job_id: string;
+  is_first_solve?: boolean;
+  xp_awarded?: number;
+  current_streak?: number;
+  solved_problem_count?: number;
+  next_recommended_problem?: {
+    id: string;
+    slug: string;
+    title: string;
+    difficulty: Difficulty;
+    topic: string;
+  };
+}
+

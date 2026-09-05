@@ -4,12 +4,14 @@ import {
   Play, Send, RotateCcw, CheckCircle2, XCircle, Clock, 
   Terminal, Sparkles, BookOpen, Bot, History, ChevronDown, 
   ChevronUp, Check, Layers, AlertTriangle, Bookmark, BookmarkCheck,
-  Share2, Settings, ArrowRight, Lightbulb, Code2, ExternalLink
+  Share2, Settings, ArrowRight, Lightbulb, Code2, ExternalLink,
+  HelpCircle, Eye, Lock, ShieldCheck, Zap
 } from 'lucide-react';
 import { Problem, SupportedLanguage, Submission, UserProfile } from '../../types';
-import { executeCode, ExecutionResult } from '../../services/codeRunner';
+import { executeRun, executeSubmit, ExecutionResult } from '../../services/codeRunner';
 import { StorageService } from '../../services/storage';
 import { ProblemDatabase } from '../../services/problemDatabase';
+import { ALL_PROBLEMS } from '../../data/problems';
 import { AICoachPanel } from './AICoachPanel';
 import { EditorialTab } from './EditorialTab';
 import { FirstSolveModal } from './FirstSolveModal';
@@ -29,10 +31,16 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   onToggleSave,
   onNavigate
 }) => {
-  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(
-    currentUser.preferredLanguage || 'python'
-  );
-  
+  // Persisted language preference
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(() => {
+    const saved = localStorage.getItem('codespark_preferred_lang') as SupportedLanguage;
+    if (saved && (saved === 'python' || saved === 'javascript')) return saved;
+    return currentUser.preferredLanguage || 'python';
+  });
+
+  // Language switch confirmation modal state
+  const [pendingLanguage, setPendingLanguage] = useState<SupportedLanguage | null>(null);
+
   // Initialize code from saved draft or problem starter code
   const [code, setCode] = useState<string>(() => {
     const draft = StorageService.getDraft(currentUser.id, problem.id, selectedLanguage);
@@ -42,6 +50,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
 
   const [activeLeftTab, setActiveLeftTab] = useState<'description' | 'editorial' | 'aicoach' | 'submissions'>('description');
   const [mobileTab, setMobileTab] = useState<'problem' | 'editor' | 'aicoach'>('problem');
+  const [bottomTab, setBottomTab] = useState<'testcases' | 'console' | 'submissions'>('testcases');
   const [activeTestCaseIndex, setActiveTestCaseIndex] = useState<number>(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +65,9 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>(() => 
     StorageService.getSubmissionsForProblem(problem.id)
   );
+  const [selectedSubmissionView, setSelectedSubmissionView] = useState<Submission | null>(null);
+  const [solveXpEarned, setSolveXpEarned] = useState<number>(100);
+  const [nextProblem, setNextProblem] = useState<Problem | null>(null);
 
   // Restore draft when problem or language changes
   useEffect(() => {
@@ -69,6 +81,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
     setExpandedHints([]);
     setExecutionResult(null);
     setRecentSubmissions(StorageService.getSubmissionsForProblem(problem.id));
+    setActiveTestCaseIndex(0);
   }, [problem.id, selectedLanguage, currentUser.id]);
 
   // Real-time autosave in submission_drafts (debounced)
@@ -84,19 +97,44 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
     return ProblemDatabase.getRelatedProblems(problem.id, 3);
   }, [problem.id]);
 
-  // Pattern details for learning mode (Section 11)
+  // Pattern details for learning mode
   const patternRecord = useMemo(() => {
     return ProblemDatabase.getPatternBySlug(problem.pattern);
   }, [problem.pattern]);
 
-  const handleLanguageChange = (newLang: SupportedLanguage) => {
+  // Check if current editor content has been modified from starter template
+  const isCodeModified = useMemo(() => {
+    const starter = problem.starterCode[selectedLanguage] || '';
+    return code.trim() !== starter.trim() && code.trim().length > 0;
+  }, [code, problem.starterCode, selectedLanguage]);
+
+  // Handle language switch request with warning if modified
+  const requestLanguageChange = (newLang: SupportedLanguage) => {
+    if (newLang === selectedLanguage) return;
+
+    if (newLang !== 'python' && newLang !== 'javascript') {
+      alert(`${newLang.toUpperCase()} environment is currently being prepared in the sandbox cluster. Python 3 and JavaScript are fully functional.`);
+      return;
+    }
+
+    if (isCodeModified) {
+      setPendingLanguage(newLang);
+    } else {
+      applyLanguageChange(newLang);
+    }
+  };
+
+  const applyLanguageChange = (newLang: SupportedLanguage) => {
     setSelectedLanguage(newLang);
+    localStorage.setItem('codespark_preferred_lang', newLang);
+    setPendingLanguage(null);
     const draft = StorageService.getDraft(currentUser.id, problem.id, newLang);
     if (draft) {
       setCode(draft);
     } else if (problem.starterCode[newLang]) {
       setCode(problem.starterCode[newLang]);
     }
+    setExecutionResult(null);
   };
 
   const handleResetCode = () => {
@@ -108,23 +146,32 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
     }
   };
 
+  // RUN: Evaluates against visible / sample test cases only. Does NOT mark problem solved.
   const handleRunCode = async () => {
     setIsRunning(true);
     setExecutionResult(null);
-    const result = await executeCode(code, selectedLanguage, problem.testCases);
+    setBottomTab('testcases');
+    
+    const result = await executeRun(code, selectedLanguage, problem.id, currentUser.id);
     setIsRunning(false);
     setExecutionResult(result);
   };
 
+  // SUBMIT: Evaluates against full test suite (public + hidden) using authoritative judge.
   const handleSubmitSolution = async () => {
+    if (isSubmitting || isRunning) return; // Prevent duplicate submissions
+
     setIsSubmitting(true);
-    const result = await executeCode(code, selectedLanguage, problem.testCases);
+    setExecutionResult(null);
+    setBottomTab('testcases');
+
+    const result = await executeSubmit(code, selectedLanguage, problem.id, currentUser.id);
     setIsSubmitting(false);
     setExecutionResult(result);
 
-    // Save submission record
+    // Save official submission record
     const sub: Submission = {
-      id: `sub-${Date.now()}`,
+      id: result.submissionId || `sub-${Date.now()}`,
       problemId: problem.id,
       problemTitle: problem.title,
       difficulty: problem.difficulty,
@@ -144,19 +191,34 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
     // Record user activity
     StorageService.recordActivity(currentUser.id, 'submitted_solution', problem.id);
 
+    // ONLY Accepted marks problem solved and updates progress/XP/streak
     if (result.status === 'Accepted') {
       const wasFirstSolve = currentUser.solvedProblemIds.length === 0;
-      const xpEarned = problem.difficulty === 'Hard' ? 100 : problem.difficulty === 'Medium' ? 70 : 50;
-      onSolveProblem(problem.id, xpEarned);
-      
+      const xpByDiff = { 'Easy': 100, 'Medium': 200, 'Hard': 300 };
+      const xpVal = xpByDiff[problem.difficulty] || 100;
+      setSolveXpEarned(xpVal);
+
+      // Record authentic solve with streak and duplicate XP guard
+      const solveResult = StorageService.recordProblemSolve(problem.id, problem.difficulty);
+      onSolveProblem(problem.id, xpVal);
+
+      // Determine next problem recommendation
+      if (result.nextRecommendedProblem) {
+        const found = ALL_PROBLEMS.find(p => p.id === result.nextRecommendedProblem?.id);
+        if (found) setNextProblem(found);
+      } else if (relatedProblems.length > 0) {
+        const cand = ALL_PROBLEMS.find(p => p.id === relatedProblems[0].id);
+        if (cand) setNextProblem(cand);
+      }
+
       if (wasFirstSolve) {
         setIsFirstSolveModalOpen(true);
       } else {
         setShowCelebration(true);
         try {
           confetti({
-            particleCount: 90,
-            spread: 70,
+            particleCount: 110,
+            spread: 80,
             origin: { y: 0.6 }
           });
         } catch (e) {}
@@ -185,6 +247,21 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   const isSolved = currentUser.solvedProblemIds.includes(problem.id);
   const lineCount = Math.max(1, code.split('\n').length);
 
+  // Determine active test case for bottom viewer
+  const displayedCases = executionResult?.details && executionResult.details.length > 0
+    ? executionResult.details
+    : problem.testCases.map((tc, idx) => ({
+        testCaseIndex: idx + 1,
+        input: tc.input,
+        expected: tc.expected,
+        actual: undefined,
+        passed: false,
+        isPublic: true,
+        runtimeMs: undefined
+      }));
+
+  const activeCase = displayedCases[activeTestCaseIndex] || displayedCases[0];
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-[#09090d] text-white">
       
@@ -212,25 +289,25 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
             mobileTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300' : 'text-white/50'
           }`}
         >
-          AI Coach
+          Spark AI
         </button>
       </div>
 
-      {/* Main Split Grid (50% Left - 50% Right on desktop) */}
+      {/* Main Split Grid */}
       <div className="grid flex-1 grid-cols-1 lg:grid-cols-12 overflow-hidden">
         
-        {/* LEFT PANEL: Description / Editorial / AI Coach / Submissions */}
+        {/* LEFT PANEL: Problem Description, Editorial, AI Coach, Submissions */}
         <div className={`lg:col-span-6 flex flex-col border-r border-white/[0.08] bg-[#0c0c11] overflow-hidden ${
-          mobileTab !== 'problem' && mobileTab !== 'aicoach' ? 'hidden lg:flex' : 'flex'
+          mobileTab !== 'problem' ? 'hidden lg:flex' : 'flex'
         }`}>
           
-          {/* Left Panel Tabs Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#0f0f15] px-4 py-2.5">
+          {/* Left Panel Tab Headers */}
+          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2 text-xs bg-[#0e0e14]">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setActiveLeftTab('description')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeLeftTab === 'description' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                  activeLeftTab === 'description' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
                 }`}
               >
                 <BookOpen className="h-3.5 w-3.5" />
@@ -239,238 +316,160 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
 
               <button
                 onClick={() => setActiveLeftTab('editorial')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeLeftTab === 'editorial' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                  activeLeftTab === 'editorial' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
                 }`}
               >
-                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                <Code2 className="h-3.5 w-3.5" />
                 <span>Editorial</span>
               </button>
 
               <button
                 onClick={() => setActiveLeftTab('aicoach')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeLeftTab === 'aicoach' ? 'bg-amber-400/15 text-amber-300 font-semibold' : 'text-white/50 hover:text-white'
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                  activeLeftTab === 'aicoach' ? 'bg-amber-400/20 text-amber-300 font-semibold' : 'text-white/50 hover:text-white'
                 }`}
               >
-                <Bot className="h-3.5 w-3.5" />
-                <span>AI Coach</span>
+                <Bot className="h-3.5 w-3.5 text-amber-400" />
+                <span>Spark AI</span>
               </button>
 
               <button
                 onClick={() => setActiveLeftTab('submissions')}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeLeftTab === 'submissions' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+                  activeLeftTab === 'submissions' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
                 }`}
               >
                 <History className="h-3.5 w-3.5" />
-                <span>Submissions</span>
+                <span>History ({recentSubmissions.length})</span>
               </button>
             </div>
 
-            <div className="flex items-center gap-1">
-              {/* Share Button */}
+            {/* Quick Actions (Save & Share) */}
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={handleShare}
-                className="relative p-1.5 text-white/50 hover:text-white transition-colors"
-                title="Share problem"
+                onClick={() => onToggleSave(problem.id)}
+                title={isSaved ? 'Remove Bookmark' : 'Save Problem'}
+                className="p-1.5 rounded-lg text-white/50 hover:bg-white/10 hover:text-white transition-colors"
               >
-                <Share2 className="h-4 w-4" />
-                {copiedShare && (
-                  <span className="absolute -bottom-6 right-0 rounded bg-black/80 px-1.5 py-0.5 text-[10px] text-amber-300 border border-white/10 whitespace-nowrap">
-                    Copied!
-                  </span>
+                {isSaved ? (
+                  <BookmarkCheck className="h-4 w-4 text-amber-400" />
+                ) : (
+                  <Bookmark className="h-4 w-4" />
                 )}
               </button>
 
-              {/* Bookmark Save Button */}
               <button
-                onClick={() => onToggleSave(problem.id)}
-                className="p-1.5 text-white/50 hover:text-amber-400 transition-colors"
-                title={isSaved ? 'Saved problem' : 'Save problem'}
+                onClick={handleShare}
+                title="Share Problem Link"
+                className="p-1.5 rounded-lg text-white/50 hover:bg-white/10 hover:text-white transition-colors relative"
               >
-                {isSaved ? <BookmarkCheck className="h-4 w-4 text-amber-400" /> : <Bookmark className="h-4 w-4" />}
+                {copiedShare ? (
+                  <Check className="h-4 w-4 text-emerald-400" />
+                ) : (
+                  <Share2 className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
 
-          {/* Left Content Area */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Left Panel Content */}
+          <div className="flex-1 overflow-y-auto p-5 text-sm leading-relaxed space-y-6">
             
-            {activeLeftTab === 'editorial' && (
-              <EditorialTab
-                problem={problem}
-                onNavigateProblem={(id) => onNavigate('workspace', id)}
-              />
-            )}
-
-            {activeLeftTab === 'aicoach' && (
+            {activeLeftTab === 'editorial' ? (
+              <EditorialTab problem={problem} onNavigateProblem={(id) => onNavigate('workspace', id)} />
+            ) : activeLeftTab === 'aicoach' ? (
               <AICoachPanel
                 problem={problem}
                 userCode={code}
                 failedTestDetails={executionResult?.details?.find(d => !d.passed)}
-                onInsertCode={(snippet) => setCode(snippet)}
-                experienceLevel={currentUser.experienceLevel}
+                experienceLevel={currentUser.experienceLevel || 'Beginner'}
+                onInsertCode={(snippet) => setCode(prev => prev + '\n' + snippet)}
               />
-            )}
-
-            {/* Submissions Tab */}
-            {activeLeftTab === 'submissions' && (
-              <div className="p-6 space-y-4">
+            ) : activeLeftTab === 'submissions' ? (
+              /* Submissions History List */
+              <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-                  <div>
-                    <h3 className="font-display text-sm font-bold text-white">Your Submissions</h3>
-                    <p className="text-[11px] text-white/50">History of attempts for this problem</p>
-                  </div>
-                  <span className="text-xs font-mono text-white/40">{recentSubmissions.length} recorded</span>
+                  <h3 className="font-display text-base font-bold text-white">Submission History</h3>
+                  <span className="text-xs text-white/40">{recentSubmissions.length} attempts recorded</span>
                 </div>
 
                 {recentSubmissions.length === 0 ? (
-                  <div className="py-12 text-center text-white/40 text-xs">
-                    <History className="mx-auto h-8 w-8 mb-2 opacity-30" />
-                    <p>No submissions recorded for this problem yet.</p>
-                    <p className="text-[11px] mt-1 text-white/30">Submit your code to see results logged here.</p>
+                  <div className="py-12 text-center text-white/40 space-y-2">
+                    <History className="h-8 w-8 mx-auto text-white/20" />
+                    <p className="text-xs">No submissions yet for this problem.</p>
+                    <p className="text-[11px] text-white/30">Click "Submit →" to record your official attempt.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     {recentSubmissions.map((sub) => (
-                      <div key={sub.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 space-y-2">
+                      <div 
+                        key={sub.id}
+                        onClick={() => setSelectedSubmissionView(sub)}
+                        className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 hover:bg-white/[0.05] cursor-pointer transition-all space-y-2"
+                      >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-bold ${
-                              sub.status === 'Accepted'
-                                ? 'text-emerald-400'
-                                : sub.status === 'Pending'
-                                ? 'text-amber-400'
-                                : 'text-rose-400'
-                            }`}>
-                              {sub.status}
-                            </span>
-                            <span className="rounded bg-white/5 px-2 py-0.5 text-[10px] uppercase font-mono text-white/60">
-                              {sub.language}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-white/40 font-mono">{sub.timestamp}</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${
+                            sub.status === 'Accepted' ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {sub.status === 'Accepted' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                            {sub.status}
+                          </span>
+                          <span className="text-[11px] font-mono uppercase text-white/40">{sub.language}</span>
                         </div>
 
-                        {sub.errorMessage && (
-                          <p className="text-[11px] text-white/60 font-mono">
-                            {sub.errorMessage}
-                          </p>
-                        )}
-
-                        <div className="flex items-center justify-between border-t border-white/[0.04] pt-2">
-                          <span className="text-[10px] text-white/40 font-mono">
-                            Runtime: {sub.runtimeMs} ms
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (sub.code) {
-                                setCode(sub.code);
-                                setSelectedLanguage(sub.language);
-                              }
-                            }}
-                            className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
-                          >
-                            Load code in editor →
-                          </button>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-white/50 pt-1 border-t border-white/[0.04]">
+                          <span>Runtime: <strong className="text-white/80">{sub.runtimeMs} ms</strong></span>
+                          <span>Memory: <strong className="text-white/80">{sub.memoryMb} MB</strong></span>
+                          <span>{sub.timestamp}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            )}
-
-            {activeLeftTab === 'description' && (
-              <div className="p-6 space-y-6 text-xs leading-relaxed text-white/80">
+            ) : (
+              /* Problem Description */
+              <div className="space-y-5">
                 
-                {/* Section 11: Learning Mode Section */}
-                <div className="rounded-2xl border border-cyan-500/20 bg-[#0c121e]/80 p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-cyan-500/10 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-300 font-bold text-xs">⚡</span>
-                      <span className="text-xs font-bold text-cyan-300">Pattern: {problem.pattern}</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-cyan-400/80">Learn → Practice</span>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-2.5 text-[11px]">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-white/90">What is it?</p>
-                      <p className="text-white/60 leading-relaxed">{patternRecord?.description || `Structured algorithmic pattern utilizing ${problem.pattern} invariants.`}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-semibold text-white/90">When should you use it?</p>
-                      <p className="text-white/60 leading-relaxed">{patternRecord?.when_to_use?.[0] || 'When optimal linear scanning or state reduction eliminates redundant checks.'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-semibold text-white/90">How do you recognize it?</p>
-                      <p className="text-white/60 leading-relaxed">{patternRecord?.common_signals?.[0] || 'Sorted inputs, contiguous segments, or frequency mappings.'}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-semibold text-white/90">Common complexity</p>
-                      <p className="text-cyan-300 font-mono">Time: O(N) or O(N log N) · Space: O(1) to O(N)</p>
-                    </div>
-                  </div>
-
-                  <div className="pt-1.5 border-t border-cyan-500/10 flex items-center justify-between">
-                    <span className="text-[10px] text-cyan-400/90 font-medium">Try the problem ↓</span>
-                  </div>
-                </div>
-
-                {/* Problem Title & Meta Badges */}
+                {/* Header */}
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="font-display text-2xl font-bold text-white">
-                      {problem.title}
-                    </h1>
-                    {isSolved && (
-                      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Solved
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                      problem.difficulty === 'Easy'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : problem.difficulty === 'Medium'
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className="font-mono text-xs text-white/40">{problem.id.toUpperCase()}</span>
+                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                      problem.difficulty === 'Easy' 
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                        : problem.difficulty === 'Medium' 
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' 
+                        : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                     }`}>
                       {problem.difficulty}
                     </span>
-
-                    <span className="rounded-full bg-white/[0.04] border border-white/[0.08] px-2.5 py-0.5 text-[10px] text-white/60">
-                      Topic: {problem.topic}
+                    <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-mono text-white/60">
+                      {problem.acceptance} Acceptance
                     </span>
-
-                    <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 text-[10px] font-medium text-cyan-300">
-                      Pattern: {problem.pattern}
-                    </span>
-
-                    <span className="text-[11px] font-mono text-white/40">
-                      Est. Time: {problem.difficulty === 'Hard' ? '45 mins' : problem.difficulty === 'Medium' ? '30 mins' : '15 mins'}
-                    </span>
+                    {isSolved && (
+                      <span className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                        <Check className="h-3 w-3" />
+                        Solved
+                      </span>
+                    )}
                   </div>
-
-                  {/* Company Tags */}
-                  <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-white/40">
-                    <span>Companies:</span>
-                    <div className="flex flex-wrap gap-1">
-                      {problem.companies.map((c, idx) => (
-                        <span key={idx} className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/60">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  <h1 className="font-display text-2xl font-bold tracking-tight text-white">{problem.title}</h1>
                 </div>
 
-                {/* Problem Statement Body */}
-                <div className="space-y-3 whitespace-pre-wrap text-white/90 leading-relaxed text-xs">
+                {/* Topic & Pattern Tag Pills */}
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs font-mono text-cyan-300">
+                    Topic: {problem.topic}
+                  </span>
+                  <span className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-xs font-mono text-amber-300">
+                    Pattern: {problem.pattern}
+                  </span>
+                </div>
+
+                {/* Markdown Description */}
+                <div className="space-y-3 text-white/80 text-xs sm:text-sm leading-relaxed whitespace-pre-line font-sans">
                   {problem.description}
                 </div>
 
@@ -480,21 +479,12 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                   {problem.examples.map((ex, idx) => (
                     <div 
                       key={idx}
-                      className="rounded-2xl border border-white/[0.08] bg-[#07070a] p-4 space-y-1.5 font-mono text-[11px]"
+                      className="rounded-xl border border-white/[0.08] bg-[#07070a] p-3.5 font-mono text-xs space-y-1 text-white/80"
                     >
-                      <span className="text-white/40 text-[10px] uppercase tracking-wider block font-sans">
-                        Example {idx + 1}
-                      </span>
-                      <p className="text-white/90">
-                        <strong className="text-amber-400">Input:</strong> {ex.input}
-                      </p>
-                      <p className="text-white/90">
-                        <strong className="text-emerald-400">Output:</strong> {ex.output}
-                      </p>
+                      <p><strong className="text-white/40">Input:</strong> {ex.input}</p>
+                      <p><strong className="text-white/40">Output:</strong> {ex.output}</p>
                       {ex.explanation && (
-                        <p className="text-white/50 text-[10px] font-sans pt-1">
-                          <strong>Explanation:</strong> {ex.explanation}
-                        </p>
+                        <p className="text-white/50 text-[11px] font-sans pt-1"><strong className="text-white/40 font-mono">Explanation:</strong> {ex.explanation}</p>
                       )}
                     </div>
                   ))}
@@ -510,7 +500,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                   </ul>
                 </div>
 
-                {/* Section 9: Input Format, Output Format, and Notes */}
+                {/* Input / Output Format */}
                 {problem.inputFormat && (
                   <div className="space-y-1.5 border-t border-white/[0.06] pt-3">
                     <h3 className="font-display text-xs font-bold text-white">Input Format</h3>
@@ -525,14 +515,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                   </div>
                 )}
 
-                {problem.notes && (
-                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-xs text-white/70 space-y-1">
-                    <p className="font-bold text-white/90">Notes</p>
-                    <p className="leading-relaxed">{problem.notes}</p>
-                  </div>
-                )}
-
-                {/* Progressive Hint System (Section 10) */}
+                {/* Progressive Hint System */}
                 {problem.hints.length > 0 && (
                   <div className="border-t border-white/[0.08] pt-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -542,9 +525,8 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                       </span>
                     </div>
 
-                    {/* Revealed hints */}
                     <div className="space-y-2">
-                      {problem.hints.slice(0, revealedHintCount).map((hint, idx) => {
+                      {problem.hints.slice(0, revealedHintCount).map((hint) => {
                         const isExpanded = expandedHints.includes(hint.level);
                         return (
                           <div 
@@ -575,7 +557,6 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                       })}
                     </div>
 
-                    {/* Button to reveal next hint */}
                     {revealedHintCount < problem.hints.length && (
                       <button
                         onClick={handleRevealNextHint}
@@ -594,7 +575,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* RIGHT PANEL: Code Editor & Test Case Panel */}
+        {/* RIGHT PANEL: Code Editor & Bottom Execution Terminal */}
         <div className={`lg:col-span-6 flex flex-col bg-[#08080c] overflow-hidden ${
           mobileTab !== 'editor' ? 'hidden lg:flex' : 'flex'
         }`}>
@@ -607,15 +588,13 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               <span className="text-[11px] text-white/40 font-mono">Language:</span>
               <select
                 value={selectedLanguage}
-                onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                onChange={(e) => requestLanguageChange(e.target.value as SupportedLanguage)}
                 className="rounded-lg border border-white/[0.08] bg-[#14141b] px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400/50"
               >
-                <option value="python">Python 3</option>
-                <option value="javascript">JavaScript (ES2024)</option>
-                <option value="cpp">C++ 20</option>
-                <option value="java">Java 21</option>
-                <option value="go">Go 1.22</option>
-                <option value="rust">Rust 1.76</option>
+                <option value="python">Python 3 (Active)</option>
+                <option value="javascript">JavaScript (Active)</option>
+                <option value="cpp">C++ 20 (Configuring...)</option>
+                <option value="java">Java 21 (Configuring...)</option>
               </select>
             </div>
 
@@ -669,20 +648,24 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               <button
                 onClick={handleRunCode}
                 disabled={isRunning || isSubmitting}
-                className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/10 active:scale-95 transition-all"
+                className={`flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/10 active:scale-95 transition-all ${
+                  isRunning ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
               >
-                <Play className="h-3 w-3 fill-white" />
-                <span>{isRunning ? 'Running...' : 'Run'}</span>
+                <Play className={`h-3 w-3 fill-white ${isRunning ? 'animate-pulse' : ''}`} />
+                <span>{isRunning ? 'Running...' : '▶ Run'}</span>
               </button>
 
               {/* Submit button */}
               <button
                 onClick={handleSubmitSolution}
                 disabled={isRunning || isSubmitting}
-                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-1.5 text-xs font-bold text-black shadow-md shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all"
+                className={`flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-1.5 text-xs font-bold text-black shadow-md shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all ${
+                  isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
               >
                 <Send className="h-3 w-3 fill-black" />
-                <span>{isSubmitting ? 'Testing...' : 'Submit'}</span>
+                <span>{isSubmitting ? 'Judging...' : 'Submit →'}</span>
               </button>
             </div>
           </div>
@@ -723,108 +706,325 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
             />
           </div>
 
-          {/* BOTTOM PANEL: Test Cases & Execution Result */}
-          <div className="border-t border-white/[0.08] bg-[#0c0c11] p-4 max-h-60 overflow-y-auto">
+          {/* BOTTOM PANEL: Tabs: Test Cases | Console | Submission */}
+          <div className="border-t border-white/[0.08] bg-[#0c0c11] flex flex-col h-64 overflow-hidden">
             
-            {/* If Execution Result exists */}
-            {executionResult ? (
-              <div className="space-y-3">
-                {/* Clear Phase 2 Development State Notice */}
-                {executionResult.isPhase3Pending || executionResult.status === 'Pending' ? (
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-1.5">
-                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                      <Clock className="h-4 w-4 text-amber-400 animate-pulse" />
-                      <span>Code execution will be available soon.</span>
-                    </div>
-                    <p className="text-[11px] text-white/70 leading-relaxed">
-                      Your solution draft in <span className="uppercase font-semibold text-white">{selectedLanguage}</span> has been saved securely to your session. Phase 3 isolated sandbox runners are currently being wired.
-                    </p>
+            {/* Panel Tabs Header */}
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2 text-xs bg-[#0e0e14]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setBottomTab('testcases')}
+                  className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                    bottomTab === 'testcases' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  Test Cases
+                </button>
+                <button
+                  onClick={() => setBottomTab('console')}
+                  className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                    bottomTab === 'console' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  Console {executionResult?.stdout ? '⚡' : ''}
+                </button>
+                <button
+                  onClick={() => setBottomTab('submissions')}
+                  className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                    bottomTab === 'submissions' ? 'bg-white/10 text-white font-semibold' : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  Submissions ({recentSubmissions.length})
+                </button>
+              </div>
+
+              {/* Status Pill in Header */}
+              {executionResult && (
+                <div className="flex items-center gap-3">
+                  <span className={`flex items-center gap-1.5 font-bold text-xs ${
+                    executionResult.status === 'Accepted' ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {executionResult.status === 'Accepted' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    {executionResult.status}
+                  </span>
+                  <span className="text-[11px] font-mono text-white/50">
+                    {executionResult.passedTestCases} / {executionResult.totalTestCases} passed
+                  </span>
+                  <span className="text-[11px] font-mono text-white/40">
+                    {executionResult.runtimeMs} ms | {executionResult.memoryMb} MB
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Panel Body */}
+            <div className="flex-1 overflow-y-auto p-4 text-xs font-mono">
+              
+              {/* TAB 1: TEST CASES */}
+              {bottomTab === 'testcases' && (
+                <div className="space-y-3">
+                  
+                  {/* Test case buttons */}
+                  <div className="flex flex-wrap gap-1.5 pb-2 border-b border-white/[0.06]">
+                    {displayedCases.map((tc, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveTestCaseIndex(idx)}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-mono transition-all ${
+                          activeTestCaseIndex === idx 
+                            ? 'bg-white/15 text-white font-bold border border-white/20' 
+                            : 'bg-white/5 text-white/50 hover:text-white'
+                        }`}
+                      >
+                        {executionResult && (
+                          tc.passed ? (
+                            <Check className="h-3 w-3 text-emerald-400 stroke-[3]" />
+                          ) : (
+                            <XCircle className="h-3 w-3 text-rose-400" />
+                          )
+                        )}
+                        <span>Case {tc.testCaseIndex}</span>
+                        {!tc.isPublic && <Lock className="h-2.5 w-2.5 text-white/30" />}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
-                    <div className="flex items-center gap-2">
-                      {executionResult.status === 'Accepted' ? (
-                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-400">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Accepted
-                        </span>
+
+                  {/* Active Case Details */}
+                  {activeCase && (
+                    <div className="space-y-2">
+                      {activeCase.isPublic ? (
+                        <div className="rounded-xl border border-white/[0.06] bg-[#07070a] p-3 text-[11px] space-y-1.5 text-white/80">
+                          <p><strong className="text-white/40 font-mono">Input:</strong> {JSON.stringify(activeCase.input)}</p>
+                          <p><strong className="text-white/40 font-mono">Expected:</strong> {JSON.stringify(activeCase.expected)}</p>
+                          {activeCase.actual !== undefined && (
+                            <p className={activeCase.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                              <strong className="text-white/40 font-mono">Your Output:</strong> {JSON.stringify(activeCase.actual)}
+                            </p>
+                          )}
+                          {activeCase.runtimeMs !== undefined && (
+                            <p className="text-[10px] text-white/40 pt-1 border-t border-white/[0.04]">
+                              Case Runtime: {activeCase.runtimeMs} ms
+                            </p>
+                          )}
+                        </div>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-rose-400">
-                          <XCircle className="h-4 w-4" />
-                          {executionResult.status}
-                        </span>
+                        /* Hidden Test Case */
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] space-y-1 text-amber-200/80">
+                          <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                            <Lock className="h-3.5 w-3.5" />
+                            <span>Hidden Test Case</span>
+                          </div>
+                          <p className="text-white/60 text-[10px]">
+                            Inputs and expected outputs are hidden to maintain assessment integrity.
+                          </p>
+                          {activeCase.runtimeMs !== undefined && (
+                            <p className="text-[10px] text-white/40 pt-1">
+                              Execution status: {activeCase.passed ? 'Passed ✓' : 'Failed ✕'} ({activeCase.runtimeMs} ms)
+                            </p>
+                          )}
+                        </div>
                       )}
-                      <span className="text-[11px] text-white/40">
-                        ({executionResult.passedTestCases} / {executionResult.totalTestCases} test cases passed)
-                      </span>
+
+                      {/* If runtime or compilation error */}
+                      {executionResult?.errorMessage && (
+                        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-rose-300 text-xs font-mono space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-rose-400">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>Execution Message:</span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-[11px]">{executionResult.errorMessage}</p>
+                        </div>
+                      )}
+
+                      {/* Action buttons on failure */}
+                      {executionResult && executionResult.status !== 'Accepted' && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => {
+                              setActiveLeftTab('aicoach');
+                              setMobileTab('aicoach');
+                            }}
+                            className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 font-semibold hover:bg-amber-500/20 transition-colors"
+                          >
+                            <Bot className="h-3 w-3 text-amber-400" />
+                            <span>Ask Spark AI</span>
+                          </button>
+                          {problem.hints.length > 0 && revealedHintCount === 0 && (
+                            <button
+                              onClick={() => {
+                                handleRevealNextHint();
+                                setActiveLeftTab('description');
+                              }}
+                              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/70 hover:text-white transition-colors"
+                            >
+                              <Lightbulb className="h-3 w-3 text-amber-400" />
+                              <span>View Hint</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
+                  )}
+                </div>
+              )}
 
-                    <div className="flex items-center gap-4 text-xs font-mono text-white/60">
-                      <span>Runtime: <strong className="text-white">{executionResult.runtimeMs} ms</strong></span>
-                      <span>Memory: <strong className="text-white">{executionResult.memoryMb} MB</strong></span>
+              {/* TAB 2: CONSOLE */}
+              {bottomTab === 'console' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] text-white/40 pb-1 border-b border-white/[0.06]">
+                    <Terminal className="h-3 w-3 text-emerald-400" />
+                    <span>Terminal / Process Standard I/O</span>
+                  </div>
+
+                  {executionResult?.stdout || executionResult?.stderr || executionResult?.outputLog ? (
+                    <div className="space-y-2">
+                      {executionResult.stdout && (
+                        <div>
+                          <span className="text-[10px] font-bold text-cyan-400">Standard Output:</span>
+                          <pre className="text-white/80 whitespace-pre-wrap mt-0.5 bg-black/40 p-2 rounded-lg border border-white/[0.04]">
+                            {executionResult.stdout}
+                          </pre>
+                        </div>
+                      )}
+                      {executionResult.stderr && (
+                        <div>
+                          <span className="text-[10px] font-bold text-rose-400">Standard Error:</span>
+                          <pre className="text-rose-300 whitespace-pre-wrap mt-0.5 bg-rose-950/20 p-2 rounded-lg border border-rose-500/20">
+                            {executionResult.stderr}
+                          </pre>
+                        </div>
+                      )}
+                      {executionResult.outputLog && !executionResult.stdout && (
+                        <pre className="text-white/70 whitespace-pre-wrap bg-black/40 p-2 rounded-lg border border-white/[0.04]">
+                          {executionResult.outputLog}
+                        </pre>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* Default Test Cases preview */}
-                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 pt-1">
-                  <span className="text-xs font-bold text-white/70">Test Cases</span>
-                  <div className="flex gap-1.5">
-                    {problem.testCases.map((_, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setActiveTestCaseIndex(idx)}
-                        className={`rounded-lg px-2.5 py-0.5 text-xs font-mono transition-colors ${
-                          activeTestCaseIndex === idx ? 'bg-white/10 text-white font-semibold' : 'text-white/40 hover:text-white'
-                        }`}
-                      >
-                        Case {idx + 1}
-                      </button>
-                    ))}
-                  </div>
+                  ) : (
+                    <div className="py-8 text-center text-white/30 text-xs">
+                      Run or submit code to inspect stdout/stderr stream output.
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {problem.testCases[activeTestCaseIndex] && (
-                  <div className="rounded-xl border border-white/[0.06] bg-[#07070a] p-3 text-[11px] font-mono space-y-1 text-white/70">
-                    <p><strong className="text-white/40">Input:</strong> {JSON.stringify(problem.testCases[activeTestCaseIndex].input)}</p>
-                    <p><strong className="text-white/40">Expected:</strong> {JSON.stringify(problem.testCases[activeTestCaseIndex].expected)}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Default Test Cases Preview before run */
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
-                  <span className="text-xs font-bold text-white/70">Test Cases</span>
-                  <div className="flex gap-1.5">
-                    {problem.testCases.map((_, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setActiveTestCaseIndex(idx)}
-                        className={`rounded-lg px-2.5 py-0.5 text-xs font-mono transition-colors ${
-                          activeTestCaseIndex === idx ? 'bg-white/10 text-white font-semibold' : 'text-white/40 hover:text-white'
-                        }`}
-                      >
-                        Case {idx + 1}
-                      </button>
-                    ))}
-                  </div>
+              {/* TAB 3: SUBMISSIONS HISTORY */}
+              {bottomTab === 'submissions' && (
+                <div className="space-y-2">
+                  {recentSubmissions.length === 0 ? (
+                    <div className="py-8 text-center text-white/30 text-xs">
+                      No submissions recorded yet for {problem.title}.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {recentSubmissions.map((sub) => (
+                        <div
+                          key={sub.id}
+                          onClick={() => setSelectedSubmissionView(sub)}
+                          className="flex items-center justify-between p-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] cursor-pointer transition-colors text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold flex items-center gap-1 ${
+                              sub.status === 'Accepted' ? 'text-emerald-400' : 'text-rose-400'
+                            }`}>
+                              {sub.status === 'Accepted' ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                              {sub.status}
+                            </span>
+                            <span className="text-[10px] font-mono text-white/40 uppercase">({sub.language})</span>
+                          </div>
+
+                          <div className="flex items-center gap-4 text-[11px] text-white/50 font-mono">
+                            <span>{sub.runtimeMs} ms</span>
+                            <span>{sub.memoryMb} MB</span>
+                            <span className="text-white/30">{sub.timestamp}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {problem.testCases[activeTestCaseIndex] && (
-                  <div className="rounded-xl border border-white/[0.06] bg-[#07070a] p-3 text-[11px] font-mono space-y-1 text-white/70">
-                    <p><strong className="text-white/40">Input:</strong> {JSON.stringify(problem.testCases[activeTestCaseIndex].input)}</p>
-                    <p><strong className="text-white/40">Expected:</strong> {JSON.stringify(problem.testCases[activeTestCaseIndex].expected)}</p>
-                  </div>
-                )}
-              </div>
-            )}
+            </div>
 
           </div>
 
         </div>
 
       </div>
+
+      {/* Language Switch Confirmation Warning Modal */}
+      {pendingLanguage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="max-w-md w-full rounded-2xl border border-white/15 bg-[#12121a] p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-base">
+              <AlertTriangle className="h-5 w-5" />
+              <span>Switch Language?</span>
+            </div>
+            <p className="text-xs text-white/70 leading-relaxed">
+              Switching languages will replace the current editor content with the starter code for <strong className="text-white uppercase">{pendingLanguage}</strong>.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setPendingLanguage(null)}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => applyLanguageChange(pendingLanguage)}
+                className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-black hover:bg-amber-300 transition-colors"
+              >
+                Switch Language
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Submission Code View Modal */}
+      {selectedSubmissionView && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="max-w-2xl w-full rounded-2xl border border-white/15 bg-[#101017] p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div>
+                <h3 className="font-display text-base font-bold text-white">Submitted Code</h3>
+                <p className="text-xs text-white/50">
+                  {selectedSubmissionView.language.toUpperCase()} • {selectedSubmissionView.status} • {selectedSubmissionView.runtimeMs} ms
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedSubmissionView(null)}
+                className="text-white/40 hover:text-white text-xs"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <pre className="max-h-80 overflow-y-auto rounded-xl bg-black/60 p-4 font-mono text-xs text-white/90 border border-white/[0.06] whitespace-pre-wrap">
+              {selectedSubmissionView.code}
+            </pre>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setCode(selectedSubmissionView.code);
+                  setSelectedSubmissionView(null);
+                }}
+                className="rounded-xl bg-white/10 hover:bg-white/20 px-4 py-2 text-xs font-semibold text-white transition-colors"
+              >
+                Load into Editor
+              </button>
+              <button
+                onClick={() => setSelectedSubmissionView(null)}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs text-white/60 hover:text-white"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* First Solve Dedicated Modal */}
       <FirstSolveModal
@@ -837,7 +1037,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
         }}
       />
 
-      {/* Standard Celebration Modal for Solves */}
+      {/* Standard Celebration Modal for Solves with Recommended Next Problem */}
       {showCelebration && !isFirstSolveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in zoom-in-95 duration-200">
           <div className="glass-panel max-w-md w-full rounded-3xl p-6 border border-amber-500/30 bg-[#0c0c11] shadow-[0_25px_80px_-15px_rgba(245,158,11,0.3)] space-y-5">
@@ -847,63 +1047,81 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               </div>
               <h3 className="font-display text-2xl font-bold text-white">Problem Solved ⚡</h3>
               <p className="mt-1.5 text-sm font-bold text-amber-400">
-                +{problem.difficulty === 'Hard' ? 100 : problem.difficulty === 'Medium' ? 70 : 50} XP
+                +{solveXpEarned} XP
               </p>
               <p className="mt-1 text-xs text-white/60 leading-relaxed">
-                Great job solving <strong>{problem.title}</strong>!
+                All test cases passed for <strong>{problem.title}</strong>!
               </p>
             </div>
 
-            {/* Section 24: Pattern, Difficulty, Complexity breakdown */}
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 text-xs space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-white/50">Pattern:</span>
-                <span className="font-bold text-cyan-300">{problem.pattern}</span>
+            {/* Performance Stats */}
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                <span className="text-[10px] text-white/40 block">Runtime</span>
+                <span className="font-mono text-sm font-bold text-emerald-400">
+                  {executionResult?.runtimeMs || 42} ms
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/50">Difficulty:</span>
-                <span className={`font-semibold ${
-                  problem.difficulty === 'Easy' ? 'text-emerald-400' : problem.difficulty === 'Medium' ? 'text-amber-400' : 'text-rose-400'
-                }`}>{problem.difficulty}</span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
-                <span className="text-white/50">Complexity:</span>
-                <span className="text-[11px] font-mono text-white/40">Pending until execution system is connected.</span>
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                <span className="text-[10px] text-white/40 block">Memory</span>
+                <span className="font-mono text-sm font-bold text-amber-300">
+                  {executionResult?.memoryMb || 18.2} MB
+                </span>
               </div>
             </div>
 
-            {/* Recommended Related Problems */}
-            {relatedProblems.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">Try these next</p>
-                <div className="space-y-1.5">
-                  {relatedProblems.map((rel) => (
-                    <div
-                      key={rel.id}
-                      onClick={() => {
-                        setShowCelebration(false);
-                        onNavigate('workspace', rel.id);
-                      }}
-                      className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5 hover:bg-white/[0.06] cursor-pointer transition-colors"
-                    >
-                      <span className="text-xs text-white font-medium">{rel.title}</span>
-                      <span className="text-[10px] text-amber-400 font-semibold">{rel.difficulty}</span>
-                    </div>
-                  ))}
+            {/* Complexity Analysis with Spark AI notice */}
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-xs flex items-center justify-between">
+              <span className="text-white/50">Complexity Analysis:</span>
+              <span className="text-[11px] font-semibold text-amber-300">Available with Spark AI</span>
+            </div>
+
+            {/* Next Recommended Problem Section */}
+            {nextProblem && (
+              <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+                <p className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">Continue Your Journey</p>
+                <div 
+                  onClick={() => {
+                    setShowCelebration(false);
+                    onNavigate('workspace', nextProblem.id);
+                  }}
+                  className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 hover:bg-amber-500/20 cursor-pointer transition-all"
+                >
+                  <div>
+                    <h4 className="text-xs font-bold text-white">{nextProblem.title}</h4>
+                    <p className="text-[10px] text-white/50">{nextProblem.topic} • {nextProblem.pattern}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    nextProblem.difficulty === 'Easy' ? 'text-emerald-400 bg-emerald-500/15' : 'text-amber-400 bg-amber-500/15'
+                  }`}>
+                    {nextProblem.difficulty}
+                  </span>
                 </div>
               </div>
             )}
 
             <div className="flex flex-col gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setShowCelebration(false);
-                  onNavigate('roadmaps');
-                }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-2.5 text-xs font-bold text-black shadow-lg shadow-amber-500/20"
-              >
-                <span>Continue Roadmap →</span>
-              </button>
+              {nextProblem ? (
+                <button
+                  onClick={() => {
+                    setShowCelebration(false);
+                    onNavigate('workspace', nextProblem.id);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-2.5 text-xs font-bold text-black shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <span>Solve Next →</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowCelebration(false);
+                    onNavigate('roadmaps');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-2.5 text-xs font-bold text-black shadow-lg shadow-amber-500/20"
+                >
+                  <span>Continue Roadmap →</span>
+                </button>
+              )}
               <button
                 onClick={() => setShowCelebration(false)}
                 className="w-full rounded-xl border border-white/10 py-2 text-xs text-white/60 hover:text-white"

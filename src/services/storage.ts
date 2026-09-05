@@ -2,7 +2,8 @@ import {
   UserProfile, Submission, DiscussionPost, NotificationItem,
   UserProfileRecord, UserPreferencesRecord, UserProgressRecord, OnboardingProgressRecord,
   UserProblemProgressRecord, SavedProblemRecord, SubmissionRecord, SubmissionDraftRecord,
-  XpTransactionRecord, UserActivityRecord, SupportedLanguage
+  XpTransactionRecord, UserActivityRecord, SupportedLanguage,
+  ExecutionJobRecord
 } from '../types';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { calculateLevel } from '../data/badges';
@@ -20,7 +21,8 @@ const STORAGE_KEYS = {
   SAVED_PROBLEMS: 'codespark_saved_problems',
   SUBMISSION_DRAFTS: 'codespark_submission_drafts',
   XP_TRANSACTIONS: 'codespark_xp_transactions',
-  USER_ACTIVITY: 'codespark_user_activity'
+  USER_ACTIVITY: 'codespark_user_activity',
+  EXECUTION_JOBS: 'codespark_execution_jobs'
 };
 
 export interface EditorSettings {
@@ -584,38 +586,73 @@ export const StorageService = {
     return updated;
   },
 
-  recordProblemSolve(problemId: string, xpReward = 50): UserProfile | null {
+  saveExecutionJob(job: ExecutionJobRecord): void {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EXECUTION_JOBS);
+      const jobs: ExecutionJobRecord[] = raw ? JSON.parse(raw) : [];
+      const idx = jobs.findIndex(j => j.id === job.id);
+      if (idx !== -1) {
+        jobs[idx] = job;
+      } else {
+        jobs.unshift(job);
+      }
+      localStorage.setItem(STORAGE_KEYS.EXECUTION_JOBS, JSON.stringify(jobs.slice(0, 100)));
+    } catch (e) {
+      console.error('Error saving execution job:', e);
+    }
+  },
+
+  getExecutionJob(jobId: string): ExecutionJobRecord | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EXECUTION_JOBS);
+      if (raw) {
+        const jobs: ExecutionJobRecord[] = JSON.parse(raw);
+        return jobs.find(j => j.id === jobId) || null;
+      }
+    } catch (e) {
+      console.error('Error reading execution job:', e);
+    }
+    return null;
+  },
+
+  recordProblemSolve(
+    problemId: string, 
+    difficultyOrXp: 'Easy' | 'Medium' | 'Hard' | number = 'Easy'
+  ): (UserProfile & { isFirstSolve: boolean; xpAwarded: number }) | null {
     const user = this.getCurrentUser();
     if (!user) return null;
 
-    const isFirstSolve = user.solvedProblemIds.length === 0;
     const now = new Date().toISOString();
+    const today = now.split('T')[0];
+    const isRepeatSolve = user.solvedProblemIds.includes(problemId);
+    let xpAwarded = 0;
 
-    if (!user.solvedProblemIds.includes(problemId)) {
+    // Difficulty XP configuration: Easy: +100, Medium: +200, Hard: +300
+    const xpByDiff = { 'Easy': 100, 'Medium': 200, 'Hard': 300 };
+    const problemXpValue = typeof difficultyOrXp === 'number' 
+      ? difficultyOrXp 
+      : (xpByDiff[difficultyOrXp] || 100);
+
+    if (!isRepeatSolve) {
       user.solvedProblemIds.push(problemId);
+      xpAwarded = problemXpValue;
+      user.xp += xpAwarded;
 
-      if (isFirstSolve) {
-        user.xp = 100;
-        user.streak = 1;
-        user.longestStreak = 1;
+      const isAbsoluteFirstSolve = user.solvedProblemIds.length === 1;
+      if (isAbsoluteFirstSolve) {
         if (!user.badges.includes('first-solve')) {
           user.badges.push('first-solve');
         }
         user.journeyState = 'first_solve';
         user.firstSolveCelebrated = false;
-        this.recordXpTransaction(user.id, 100, 'problem_solved', 'problem', problemId);
         this.recordActivity(user.id, 'badge_earned', 'first-solve');
       } else {
-        user.xp += xpReward;
-        user.streak = Math.max(1, user.streak);
-        user.longestStreak = Math.max(user.streak, user.longestStreak);
         user.journeyState = 'active_learner';
-        this.recordXpTransaction(user.id, xpReward, 'problem_solved', 'problem', problemId);
       }
-      
-      const today = now.split('T')[0];
-      user.activityCalendar[today] = (user.activityCalendar[today] || 0) + 1;
-      
+
+      this.recordXpTransaction(user.id, xpAwarded, 'problem_solved', 'problem', problemId);
+
+      // Milestone badges
       if (user.solvedProblemIds.length >= 10 && !user.badges.includes('solve-10')) {
         user.badges.push('solve-10');
         this.recordActivity(user.id, 'badge_earned', 'solve-10');
@@ -624,11 +661,25 @@ export const StorageService = {
         user.badges.push('solve-50');
         this.recordActivity(user.id, 'badge_earned', 'solve-50');
       }
-
-      this.saveCurrentUser(user);
     }
 
-    // Update user_problem_progress table
+    // Streak update based on activity date (Section 29: multiple solves on same day = 1 active day)
+    const hadActivityToday = !!(user.activityCalendar && user.activityCalendar[today]);
+    if (!hadActivityToday) {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      if (user.activityCalendar && user.activityCalendar[yesterday]) {
+        user.streak = (user.streak || 0) + 1;
+      } else {
+        user.streak = 1;
+      }
+      user.longestStreak = Math.max(user.longestStreak || 1, user.streak);
+    }
+    user.activityCalendar = user.activityCalendar || {};
+    user.activityCalendar[today] = (user.activityCalendar[today] || 0) + 1;
+
+    this.saveCurrentUser(user);
+
+    // Update user_problem_progress record
     const all = this.getAllUserProblemProgress(user.id);
     const existing = all[problemId];
     all[problemId] = {
@@ -637,7 +688,7 @@ export const StorageService = {
       problem_id: problemId,
       status: 'solved',
       attempt_count: existing ? (existing.attempt_count || 0) + 1 : 1,
-      solved_at: now,
+      solved_at: existing?.solved_at || now,
       last_attempted_at: now,
       created_at: existing ? existing.created_at : now,
       updated_at: now
@@ -651,14 +702,16 @@ export const StorageService = {
 
     this.recordActivity(user.id, 'problem_solved', problemId);
 
-    this.addNotification({
-      title: isFirstSolve ? 'First Problem Solved! ⚡' : 'Problem Solved! ⚡',
-      message: `Earned +${isFirstSolve ? 100 : xpReward} XP. Current streak: ${user.streak} ${user.streak === 1 ? 'day' : 'days'}.`,
-      type: 'milestone',
-      linkUrl: '/roadmaps'
-    }, user.id);
+    if (!isRepeatSolve) {
+      this.addNotification({
+        title: 'Problem Solved! ⚡',
+        message: `Earned +${xpAwarded} XP. Current streak: ${user.streak} ${user.streak === 1 ? 'day' : 'days'}.`,
+        type: 'milestone',
+        linkUrl: '/roadmaps'
+      }, user.id);
+    }
 
-    return user;
+    return Object.assign(user, { isFirstSolve: !isRepeatSolve, xpAwarded });
   },
 
   completeFirstLesson(): UserProfile | null {
