@@ -1,199 +1,349 @@
-# CodeSpark ⚡ — Phase 3 Dependency Graph & Order Separation
+# CodeSpark ⚡ — Phase 3 Corrected Dependency Graph
 
 **Document**: `docs/phase-3-dependency-graph.md`  
 **Date**: September 6, 2026  
-**Status**: Final & Verified  
-**Scope**: Dependency Graph Contradiction Resolution, Development DAG, and Staged Release Order
+**Status**: Authoritative & Approved  
+**Scope**: Explicit Separation of Development Order, Integration Order, Security Order, and Release Order
 
 ---
 
-## 1. Executive Summary
+# 1. DEFINITIONS
 
-A common failure mode in complex platform engineering is conflating **Development Order (Build Dependency Graph)** with **Release Order (Deployment & Feature-Flag Rollout)**.
+## DEVELOPMENT ORDER
+The order in which engineering work should be implemented.
+A feature may be developed before its runtime dependency is completely finished by using:
+* interfaces
+* mocks
+* fixtures
+* test doubles
+* feature flags
 
-In a naive linear sequence (e.g. Steps 1 through 22 in strict numeric sequence), multiple architectural contradictions arise:
-1. Components are scheduled after features that depend on them (e.g. Editor & Drafts scheduled after Run/Submit).
-2. Security audits are scheduled after untrusted code execution has already been introduced.
-3. Downstream progress rewards are split into arbitrary steps despite forming a single reactive state machine.
-
-This document resolves all dependency graph contradictions and establishes a strict separation between:
-* **The Development DAG**: The acyclic technical build order dictated by software dependencies and component interfaces.
-* **The Release Pipeline**: The risk-managed deployment order dictated by observability, feature flags, and phase gates.
+**Development order is therefore optimized for engineering efficiency.**
 
 ---
 
-## 2. Dependency Graph Contradictions & Formal Resolutions
+## INTEGRATION ORDER
+The order in which components are connected to the real production-like system.
+**Integration must respect actual technical dependencies.**
+
+---
+
+## RELEASE ORDER
+The order in which functionality is enabled for real users.
+Release order must prioritize:
+1. Safety
+2. Data integrity
+3. Reliability
+4. User experience
+
+**A feature can be completely developed but remain disabled in production.**
+
+---
+
+# 2. RESOLVED ARCHITECTURE
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             CONTRADICTION RESOLUTION MATRIX                                │
-├──────────────────────────┬────────────────────────────┬─────────────────────────────────────┤
-│ Naive Sequence           │ Conflict / Contradiction   │ Architectural Resolution            │
-├──────────────────────────┼────────────────────────────┼─────────────────────────────────────┤
-│ Step 4: Sandbox          │ Code is executed in Step 5 │ Base Sandbox Hardening is a Layer 1 │
-│ vs                       │ and 7 BEFORE the security  │ prerequisite. Comprehensive PenTest │
-│ Step 19: Security Audit  │ audit in Step 19.          │ is a Gate 6 Pre-Release Gate.       │
-├──────────────────────────┼────────────────────────────┼─────────────────────────────────────┤
-│ Step 7: Submission Queue │ Step 7 submits jobs to a   │ Build the Judge Engine first in     │
-│ vs                       │ judge, but the judge is    │ Layer 1; wire the submission queue  │
-│ Step 8: Judge Engine     │ built in Step 8.           │ to consume it in Layer 3.           │
-├──────────────────────────┼────────────────────────────┼─────────────────────────────────────┤
-│ Step 5/7: Run & Submit   │ Users cannot run or submit │ Build Editor state & DraftService   │
-│ vs                       │ code without a resilient   │ in Layer 2 before wiring workspace  │
-│ Step 16/17: Editor/Draft │ editor & draft autosave.   │ Run/Submit actions in Layer 4.      │
-├──────────────────────────┼────────────────────────────┼─────────────────────────────────────┤
-│ Steps 10, 11, 12, 13, 14:│ These form a single atomic │ Group into an atomic Progress and   │
-│ Solved, XP, Streak,      │ reactive cascade on        │ Reward Pipeline in Layer 2/3 with   │
-│ Roadmap, Recommendation  │ ACCEPTED judge events.     │ isolated unit tests.                │
-├──────────────────────────┼────────────────────────────┼─────────────────────────────────────┤
-│ Step 15: Multi-Language  │ Adding languages at the    │ Build language-agnostic runner      │
-│ vs                       │ end risks rewriting the    │ interface (`IExecutionProvider`)    │
-│ Step 3: Abstraction      │ execution abstraction.     │ from Day 1; languages are plugins.  │
-└──────────────────────────┴────────────────────────────┴─────────────────────────────────────┘
+┌─────────────────────────────┐
+│       CODESPARK UI          │
+│ Problem / Editor / Results  │
+└──────────────┬──────────────┘
+               │
+               ↓
+┌─────────────────────────────┐
+│       APPLICATION API       │
+│ Run / Submit / Progress     │
+└──────────────┬──────────────┘
+               │
+       ┌───────┴────────┐
+       ↓                ↓
+┌──────────────┐ ┌───────────────┐
+│ EXECUTION    │ │ APPLICATION   │
+│ SERVICE      │ │ SERVICES      │
+└──────┬───────┘ └───────┬───────┘
+       │                  │
+       ↓                  ↓
+┌──────────────┐   ┌──────────────┐
+│ SANDBOX      │   │ DATABASE     │
+│ PROVIDERS    │   │              │
+└──────────────┘   └──────────────┘
+       │
+       ↓
+┌─────────────────────────────┐
+│ Language Runtimes           │
+│ Python / C++ / Java / JS    │
+└─────────────────────────────┘
+```
+
+### Key Architectural Corrections:
+* **The editor does NOT depend on the execution provider.**
+* **Draft autosave does NOT depend on the judge.**
+* **Submission history does NOT need to wait for the recommendation system.**
+* **Security testing is both continuous and a final release gate.**
+
+---
+
+# 3. AUTHORITATIVE HARD DEPENDENCIES
+
+Only these relationships are treated as **HARD dependencies**:
+
+* **Authentication**: Required by Private submissions, Private drafts, User progress, XP, Streak, Saved problems.
+* **Database**: Required by Submission persistence, Progress persistence, XP transactions, Streak/activity, Draft persistence.
+* **Execution Service**: Required by Run, Submit, Judge.
+* **Sandbox**: Required by Actual code execution.
+* **Language Runtime**: Required by Execution of that language (e.g. Python runtime → Python execution; C++ runtime is NOT required to develop Python).
+* **Judge**: Required by Official submission result (`ACCEPTED`, `WRONG_ANSWER`, `TIME_LIMIT_EXCEEDED`, `MEMORY_LIMIT_EXCEEDED`, `RUNTIME_ERROR`, `COMPILATION_ERROR`).
+* **Accepted Result**: Required by First solve event.
+* **Solve Event**: Required by First-solve XP and Roadmap solved count.
+* **Solved/Activity Data**: Required by Roadmap Progress and Personalized Recommendation.
+
+---
+
+# 4. FEATURES THAT CAN BE DEVELOPED IN PARALLEL
+
+The following do **NOT** need to wait for code execution and may be developed using mocks/test fixtures:
+* **Editor**: Independently developed (`Editor → Code State`). Does not require execution provider.
+* **Draft Autosave**: Independently developed after auth + DB (`Editor → Draft Service → Database`). Does not depend on Judge.
+* **Submission History UI**: Developed using mock submission records.
+* **Results UI**: Developed using mocked execution results.
+* **XP UI**: Developed using fixture data.
+* **Streak UI**: Developed using fixture activity dates.
+* **Roadmap UI**: Developed independently; progress integration requires solved data.
+* **Spark AI UI**: Developed independently using mock responses; production integration requires authenticated context.
+
+---
+
+# 5. CORRECTED DEVELOPMENT ORDER (D0 – D10)
+
+* **D0 — DISCOVERY**: Audit existing application, auth, database, execution infra, editor, deployment.  
+  *Outputs*: `docs/phase-3-audit.md`, `docs/phase-3-change-plan.md`. *Dependency*: None.
+* **D1 — CONTRACTS & DATA**: Database schema changes, execution request/response types, submission types, judge types, progress types, XP types, draft types.  
+  *Outputs*: Domain types, migrations, API contracts, interfaces. *Dependency*: D0.
+* **D2 — FRONTEND FOUNDATION**: Develop in parallel: Editor, Results Panel, Submission History, Progress UI, XP UI, Streak UI, Roadmap UI, Draft UI using mocked data.  
+  *Dependency*: D1.
+* **D3 — EXECUTION FOUNDATION**: `ExecutionService`, provider adapter, sandbox, Python runtime, limits (CPU, memory, output), network isolation, health checks.  
+  *Dependency*: D1. **Security testing starts immediately here.**
+* **D4 — PYTHON RUN**: Integrate Editor → Run API → `ExecutionService` → Python Sandbox → Public Tests → Results UI.  
+  *Dependency*: D2 + D3.
+* **D5 — SUBMISSION & JUDGING**: Submission API, persistence, execution jobs, queue, judge, hidden tests, terminal result, history integration.  
+  *Dependency*: D3.
+* **D6 — USER PROGRESS**: `Accepted → Solve Event (XP, Activity/Streak, Solved Problem)`.  
+  *Dependency*: D5.
+* **D7 — LEARNING SYSTEM**: Roadmap progress, next-problem recommendation, topic progression, pattern progression.  
+  *Dependency*: D6. Consumes real progress data.
+* **D8 — ADDITIONAL LANGUAGES**: Develop each language independently (C++, Java, JavaScript). Each gets: runtime, sandbox, execution adapter, test fixtures, judge integration, security tests.  
+  *Dependency*: D3. Does NOT wait for roadmap/recommendation.
+* **D9 — SPARK AI**: AI service abstraction, context builder, hints, error explanation, complexity analysis.  
+  *Dependency*: D1 for abstraction; D6 for production context. Does NOT block core coding.
+* **D10 — HARDENING**: Security testing, load testing (50 reqs), failure testing, recovery testing, data-integrity testing, E2E testing.  
+  *Dependency*: All production-target functionality implemented.
+
+---
+
+# 6. INTEGRATION ORDER
+
+Components connect to the real system in this strict technical order:
+
+```text
+1. Database
+        ↓
+2. Execution Service
+        ↓
+3. Sandbox
+        ↓
+4. Python Runtime
+        ↓
+5. Run API
+        ↓
+6. Results UI
+        ↓
+7. Submission API
+        ↓
+8. Queue
+        ↓
+9. Judge
+        ↓
+10. Submission History
+        ↓
+11. Solve Event
+        ↓
+12. XP + Activity
+        ↓
+13. Roadmap Progress
+        ↓
+14. Recommendations
+        ↓
+15. Additional Languages
+        ↓
+16. Spark AI
+```
+*(Editor and Draft Autosave integrate independently and can occur earlier.)*
+
+---
+
+# 7. SECURITY ORDER
+
+Security is continuous across three distinct layers:
+* **S1 — BEFORE EXECUTION**: Test sandbox configuration, network isolation, filesystem isolation, resource limits, and environment variable isolation before running untrusted code.
+* **S2 — DURING DEVELOPMENT**: For every new language: `Implement → Sandbox test → Attack tests → Resource tests → Only then integrate`.
+* **S3 — FINAL RELEASE AUDIT**: Comprehensive end-to-end audit testing authentication, authorization, execution, database, APIs, user data, secrets, AI context, and rate limits.
+
+---
+
+# 8. RELEASE ORDER (R0 – R10)
+
+```text
+R0: EXISTING APPLICATION ──────────► Baseline operational, zero new execution enabled.
+        ↓
+R1: FOUNDATION ────────────────────► Database migrations, execution service infra, flags, logging, health checks (invisible to users).
+        ↓
+R2: PYTHON RUN ────────────────────► Enable "Run Python" only on public test cases. (Gate: 100% sandbox/execution tests pass, 0 false Accepted).
+        ↓
+R3: PYTHON SUBMIT ─────────────────► Enable "Submit" with hidden tests and real judging. (Gate: judge reliability, persistence, 0 lost submissions).
+        ↓
+R4: PROGRESS ──────────────────────► Enable Solved status, XP, Streak, Roadmap progress. (Gate: 100% data-integrity tests pass).
+        ↓
+R5: RECOMMENDATIONS ───────────────► Enable "What's Next?" recommendation engine. (Gate: uses real user progress).
+        ↓
+R6: ADDITIONAL LANGUAGES ──────────► Release independently (C++ → Java → JavaScript) via individual feature flags (CPP_EXECUTION_ENABLED, etc.).
+        ↓
+R7: DRAFT & EDITOR ENHANCEMENTS ───► Enable advanced editor, autosave, restoration.
+        ↓
+R8: SPARK AI ──────────────────────► Enable Hints, error explanation, complexity analysis. (Gate: privacy & context security tests pass).
+        ↓
+R9: FULL HARDENING ────────────────► Security audit, performance benchmark, failure recovery, E2E tests.
+        ↓
+R10: GENERAL AVAILABILITY ─────────► 100% production rollout.
 ```
 
 ---
 
-## 3. The Development Order (Directed Acyclic Graph — DAG)
+# 9. IMPORTANT RELEASE INDEPENDENCE RULE
 
-The development order follows a strict bottom-up dependency flow where no component is constructed before its dependencies exist.
+A feature being incomplete must **NOT** automatically block unrelated functionality:
+* **If C++ fails**: `CPP_EXECUTION_ENABLED = false`, `PYTHON_EXECUTION_ENABLED = true`.
+* **If Spark AI fails**: `SPARK_AI_ENABLED = false`, coding platform remains active.
+* **If Recommendations fail**: Recommendations fallback or disable; Roadmap remains active.
+* **If Draft Autosave fails**: Local in-memory state preserved; Editor remains active.
+* **If Execution Provider fails**: `CODE_EXECUTION_ENABLED = false`; Problem browsing, roadmap, lessons, and reading remain active.
+
+---
+
+# 10. DEVELOPMENT vs RELEASE MATRIX
+
+| Feature | Development Dependency | Integration Dependency | Release Dependency |
+|---|---|---|---|
+| **Editor** | D1 | Problem page | Existing app |
+| **Drafts** | Auth + DB | Editor + DB | Auth/data tests |
+| **Results UI** | API contract | Run API | Python Run |
+| **Execution Service** | Contracts | Sandbox | Security |
+| **Python** | Execution Service | Sandbox | Sandbox + execution tests |
+| **Submission** | Execution + DB | Judge | Judge |
+| **Judge** | Execution + tests | Submission | Security + correctness |
+| **History** | DB schema | Submission | Authorization |
+| **Solved** | Judge | Accepted event | Data integrity |
+| **XP** | Solve event | Solved | Transaction tests |
+| **Streak** | Activity event | Solve/activity | Date tests |
+| **Roadmap** | Solved data | Progress service | Accuracy tests |
+| **Recommendations** | Roadmap/progress | Progress service | Recommendation tests |
+| **C++** | Execution abstraction | C++ sandbox | C++ security tests |
+| **Java** | Execution abstraction | Java sandbox | Java security tests |
+| **JavaScript** | Execution abstraction | JS sandbox | JS security tests |
+| **Spark AI** | AI abstraction | Auth + context | Privacy/security |
+| **Security** | Can begin immediately | All systems | Final gate |
+| **Performance** | Can begin with prototypes | Full pipeline | Final gate |
+
+---
+
+# 11. FINAL CORRECTED DEPENDENCY GRAPH
 
 ```text
-LAYER 0: FOUNDATION & CONTRACTS
-├── Step 1: Project Audit & Baseline Preservation
-├── Step 2: Database Schema & Migration (001_phase3_execution_jobs.sql)
-└── Step 3: Type Definitions & Execution Service Abstraction (IExecutionProvider)
-       │
-       ▼
-LAYER 1: CORE EXECUTION ENGINES (HEADLESS & TESTABLE)
-├── Step 2b: Test Case Repository (Public vs Hidden separation)
-├── Step 4:  Isolated Sandbox Runners (Python 3.14 / Node.js with CPU/Memory/Output limits)
-└── Step 8:  Deterministic Judge Engine (Stdout evaluation, hidden test masking)
-       │
-       ▼
-LAYER 2: CLIENT STATE & DATA SERVICES
-├── Step 16a: Code Editor Primitives (Tab indentation, font size, keybindings)
-├── Step 17:  DraftService (Autosave, per-problem and per-language draft isolation)
-├── Step 10-12: Progress & Reward Service (Atomic solve, XP ledger, calendar-locked streak)
-├── Step 13:  Roadmap Progress Calculator (Exact % calculation)
-└── Step 14:  RecommendationService (Deterministic 5-tier recommendation engine)
-       │
-       ▼
-LAYER 3: API & ORCHESTRATION LAYER
-├── Step 5:  POST /api/code/run (Public test debugging endpoint)
-├── Step 7:  POST /api/code/submit & Execution Jobs (Queue state machine)
-├── Step 18: SparkAIService (Sanitized context, zero hidden test exposure)
-└── Step 3b: Circuit Breaker & Rate Limiting (3-failure threshold, 30s cooldown)
-       │
-       ▼
-LAYER 4: WORKSPACE UI INTEGRATION
-├── Step 6:  Results Panel UI (Test Cases, Console stdout/stderr, Status badges)
-├── Step 9:  Submission History Tab & Code Viewer
-├── Step 16b: Language Selector & Unsaved Changes Confirmation Modal
-├── Step 21: UI Polish, Empty States, Accessible Buttons & Mobile Overflow Checks
-└── Step 10b: "Problem Solved ⚡" Celebration Modal & Next Problem Action
-       │
-       ▼
-LAYER 5: SYSTEM VERIFICATION & BENCHMARKING
-├── Step 19: Comprehensive Security Sandbox Audit (8/8 attack vectors)
-├── Step 20: Performance & Load Benchmark (50 concurrent requests)
-└── Step 22: Complete End-to-End User Journey Tests (New user flow & Failed user flow)
+                    ┌──────────────┐
+                    │ PROJECT AUDIT│
+                    └──────┬───────┘
+                           ↓
+                    ┌──────────────┐
+                    │   CONTRACTS  │
+                    │ + DATA MODEL │
+                    └──────┬───────┘
+                           │
+          ┌────────────────┼─────────────────┐
+          ↓                ↓                 ↓
+       EDITOR          DRAFTS          EXECUTION SERVICE
+          │                │                 │
+          │                │                 ↓
+          │                │              SANDBOX
+          │                │                 │
+          │                │          ┌──────┴──────┐
+          │                │          ↓             ↓
+          │                │       PYTHON        OTHER LANGUAGES
+          │                │          │             │
+          └────────────────┼──────────┘             │
+                           ↓                        │
+                         RUN                       │
+                           ↓                        │
+                    RESULTS UI                     │
+                           │                        │
+                           ↓                        │
+                      SUBMISSION                   │
+                           ↓                        │
+                         JUDGE ←────────────────────┘
+                           │
+                           ↓
+                     ACCEPTED EVENT
+                           │
+                ┌──────────┼──────────┐
+                ↓          ↓          ↓
+             SOLVED       XP       ACTIVITY
+                │                     │
+                └──────────┬──────────┘
+                           ↓
+                    ROADMAP PROGRESS
+                           │
+                           ↓
+                    RECOMMENDATIONS
+
+        AUTHENTICATION ───────→ all user-owned data
+
+        SPARK AI
+             ↑
+      Auth + Problem + Code
+             +
+       Execution Context
+
+        SECURITY
+             ↕
+      continuous throughout
+             +
+        final release gate
+
+        PERFORMANCE
+             ↕
+      continuous testing
+             +
+        final release gate
 ```
 
 ---
 
-## 4. The Release Order (Gated Rollout & Feature-Flag Promotion)
+# 12. FINAL RULES
 
-The release order governs how features are safely promoted to users in production. Features are deployed **dark** (hidden behind feature flags) and enabled in tranches after passing specific gates.
+1. **Development does not equal release**: A feature may be fully coded but remain disabled.
+2. **Mocking is allowed during development**: Frontend work does not need to wait for backend completion if a stable contract exists.
+3. **Production integration cannot use mocks**: All production execution, judging, progress, XP, and recommendations must use real data/services.
+4. **Hard dependencies must never be bypassed**: Never connect `Run → Solved` or `Submission Created → XP`. Strictly enforce `Submission → Execute → Judge → ACCEPTED → Solve Event → XP`.
+5. **Security is continuous**: Do not wait until the end to test sandbox security.
+6. **Release independently wherever possible**: One failed feature must not disable unrelated features.
+7. **Python is the reference implementation**: Prove the complete execution/judging architecture with Python first, then reuse the same architecture for C++, Java, JavaScript.
+8. **Existing CodeSpark functionality has priority**: Never break authentication, existing user accounts, progress, problems, roadmaps, UI, or deployment.
+
+---
+
+### Final Lifecycle Model
 
 ```text
-TRANCHE 0: ZERO-RISK DARK DEPLOYMENT
-├── Action: Deploy migrations, isolated runner scripts, and API routes.
-├── Feature Flags:
-│   ├── CODE_EXECUTION_ENABLED = false
-│   ├── PYTHON_EXECUTION_ENABLED = false
-│   ├── JS_EXECUTION_ENABLED = false
-│   ├── SPARK_AI_ENABLED = false
-│   └── CPP_EXECUTION_ENABLED = false, JAVA_EXECUTION_ENABLED = false
-├── User Impact: Zero. Existing problem browsing, roadmap, and auth completely unaffected.
-└── Gate 1: Database and API health checks pass 100%.
-
-                                │
-                                ▼
-TRANCHE 1: SYNTHETIC TESTING & SECURITY AUDIT (INTERNAL STAGING)
-├── Action: Enable execution internally for test runners and staging tokens.
-├── Verification:
-│   ├── Run `tests/execution/security-sandbox.test.mjs` (0 sandbox escapes).
-│   ├── Run `tests/performance/concurrent-load.test.mjs` (50 reqs, >= 99% success).
-│   └── Run `tests/execution/python-run.test.mjs` (8/8 pass).
-└── Gate 2: Security & Performance pass rates = 100%.
-
-                                │
-                                ▼
-TRANCHE 2: BETA RUN MODE (DEBUG ONLY)
-├── Action: Enable `CODE_EXECUTION_ENABLED = true`, `PYTHON_EXECUTION_ENABLED = true`, `JS_EXECUTION_ENABLED = true`.
-├── Scope: "▶ Run" button activated for public test cases. "Submit →" remains disabled or internal.
-├── User Impact: Users can run and debug Python and JavaScript code safely against sample tests.
-├── Safety: No user progress, XP, or streaks are modified during Run mode.
-└── Gate 3: User run error rate < 1%, zero host process crashes.
-
-                                │
-                                ▼
-TRANCHE 3: FULL SUBMISSION & PROGRESS (CORE RELEASE)
-├── Action: Enable "Submit →" button, Authoritative Judging, and Progress/XP pipeline.
-├── Scope: Full test suite (public + hidden) evaluated.
-├── Rewards Activated:
-│   ├── First solve marks problem 'solved'.
-│   ├── Easy (+100 XP), Medium (+200 XP), Hard (+300 XP) credited to user.
-│   ├── Streak advances max 1 day per calendar date.
-│   └── Dynamic roadmap % updates.
-├── Circuit Breaker: Active (trips on 3 consecutive failures; 30s cooldown fallback).
-└── Gate 4: Zero false ACCEPTED results, zero lost submissions, 100% E2E test pass rate.
-
-                                │
-                                ▼
-TRANCHE 4: SPARK AI ASSISTANCE
-├── Action: Set `SPARK_AI_ENABLED = true`.
-├── Scope: AI Coach panel, "Ask Spark AI" failure actions, and hint unlocking.
-├── Safety: Sanitized public context only; zero hidden test cases or credentials leaked.
-└── Gate 5: AI fallback grace checks pass 100%.
-
-                                │
-                                ▼
-TRANCHE 5: ADDITIONAL LANGUAGE RUNTIMES
-├── Action: Promote languages individually:
-│   ├── Python 3: Live (Tranche 2)
-│   ├── JavaScript: Live (Tranche 2)
-│   ├── C++: Keep `CPP_EXECUTION_ENABLED = false` until native compiler sandbox passes Gate 5.
-│   └── Java: Keep `JAVA_EXECUTION_ENABLED = false` until JVM sandbox passes Gate 5.
-└── Rule: A language is NEVER enabled in production without its full compiler/runner passing Gate 5.
+DISCOVER → DESIGN CONTRACTS → DEVELOP IN PARALLEL → INTEGRATE BY HARD DEPENDENCIES → TEST CONTINUOUSLY → FEATURE-FLAG → STAGED RELEASE → MEASURE → EXPAND ROLLOUT → GENERAL AVAILABILITY
 ```
 
----
-
-## 5. Development Order vs. Release Order Comparative Mapping
-
-| Phase 3 Component | Development Layer (Build Order) | Release Tranche (Rollout Order) | Rationale |
-|---|:---:|:---:|---|
-| **Database Migrations** | Layer 0 | Tranche 0 | Must exist before any service writes execution jobs. |
-| **Execution Abstraction** | Layer 0 | Tranche 0 | Normalized interface prevents UI from coupling to providers. |
-| **Sandbox Isolation** | Layer 1 | Tranche 0 & 1 | Hard security boundaries must precede any untrusted code execution. |
-| **Judge Engine** | Layer 1 | Tranche 0 & 1 | Deterministic judging must be unit-tested before API consumes it. |
-| **DraftService** | Layer 2 | Tranche 0 & 2 | User code must be saved locally before running or submitting. |
-| **Progress & XP Service**| Layer 2 | Tranche 3 | Backend rewards logic tested before enabling Submit button. |
-| **Recommendation Engine**| Layer 2 | Tranche 3 | Recommendations react to solved problem events. |
-| **Python Run API** | Layer 3 | Tranche 2 | Public run API exposed first for user debugging. |
-| **Submit API & Jobs** | Layer 3 | Tranche 3 | Authoritative submit API exposed after run stability is proven. |
-| **Circuit Breaker** | Layer 3 | Tranche 2 & 3 | Protects backend availability as soon as execution is enabled. |
-| **Workspace Results UI** | Layer 4 | Tranche 2 & 3 | UI renders Run results (Tranche 2) and Submit verdicts (Tranche 3). |
-| **Spark AI Hooks** | Layer 3/4 | Tranche 4 | AI assistance rolled out after core execution is validated. |
-| **C++ / Java Runtimes** | Layer 1/3 | Tranche 5 | Additional languages released independently as compilers are provisioned. |
-
----
-
-## 6. Verification & Invariant Checklist
-
-* [x] **No Cyclical Dependencies**: Every dependency in the Development DAG points strictly downwards.
-* [x] **No Premature Execution**: No user code is executed without sandbox isolation and environment sanitization.
-* [x] **Independent Rollback**: Every release tranche can be rolled back via feature flag without impacting earlier tranches.
-* [x] **Zero Regressions**: Core CodeSpark functionality (problem library, roadmap navigation, lessons) remains 100% operational in all tranches.
+* **Development order optimizes engineering speed.**
+* **Integration order respects technical dependencies.**
+* **Release order protects users and production stability.**
