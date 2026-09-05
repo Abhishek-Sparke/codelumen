@@ -177,24 +177,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                       )}
                     </div>
                     <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                      {notifications.map((notif) => (
-                        <div 
-                          key={notif.id}
-                          onClick={() => {
-                            if (notif.linkUrl) onNavigate(notif.linkUrl.replace('/',''));
-                            setShowNotifications(false);
-                          }}
-                          className={`cursor-pointer rounded-xl p-2.5 text-xs transition-colors ${
-                            notif.read ? 'bg-white/[0.02] text-white/60 hover:bg-white/[0.05]' : 'bg-amber-500/10 text-white hover:bg-amber-500/15'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-1">
-                            <span className="font-semibold text-white/90">{notif.title}</span>
-                            <span className="text-[10px] text-white/40">{notif.timestamp}</span>
-                          </div>
-                          <p className="mt-1 text-[11px] leading-relaxed text-white/70">{notif.message}</p>
+                      {notifications.length === 0 ? (
+                        <div className="py-8 px-4 text-center">
+                          <Bell className="mx-auto h-7 w-7 text-white/20 mb-2" />
+                          <p className="text-xs font-semibold text-white/70">No notifications yet</p>
+                          <p className="text-[11px] text-white/40 mt-1">
+                            Problem solves, streak updates, and milestone alerts will appear here.
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        notifications.map((notif) => (
+                          <div 
+                            key={notif.id}
+                            onClick={() => {
+                              if (notif.linkUrl) onNavigate(notif.linkUrl.replace('/',''));
+                              setShowNotifications(false);
+                            }}
+                            className={`cursor-pointer rounded-xl p-2.5 text-xs transition-colors ${
+                              notif.read ? 'bg-white/[0.02] text-white/60 hover:bg-white/[0.05]' : 'bg-amber-500/10 text-white hover:bg-amber-500/15'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="font-semibold text-white/90">{notif.title}</span>
+                              <span className="text-[10px] text-white/40">{notif.timestamp}</span>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-white/70">{notif.message}</p>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}

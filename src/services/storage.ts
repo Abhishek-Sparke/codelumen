@@ -43,17 +43,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
 
 const INITIAL_SUBMISSIONS: Submission[] = [];
 
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    title: 'Welcome to CodeSpark ⚡',
-    message: 'Your account is ready. Pick your starting roadmap and begin deliberate practice.',
-    type: 'streak',
-    read: false,
-    timestamp: 'Just now',
-    linkUrl: '/roadmaps'
-  }
-];
+const INITIAL_NOTIFICATIONS: NotificationItem[] = [];
 
 export interface StoredAccount {
   id: string;
@@ -324,6 +314,13 @@ export const StorageService = {
 
     this.saveCurrentUser(newUser);
     this.setAuthenticated(true);
+
+    this.addNotification({
+      title: 'Welcome to CodeSpark ⚡',
+      message: 'Your account is ready. Pick your starting roadmap and begin deliberate practice.',
+      type: 'milestone',
+      linkUrl: '/roadmaps'
+    }, userId);
 
     return { success: true, user: newUser };
   },
@@ -660,6 +657,14 @@ export const StorageService = {
     }
 
     this.recordActivity(user.id, 'problem_solved', problemId);
+
+    this.addNotification({
+      title: isFirstSolve ? 'First Problem Solved! ⚡' : 'Problem Solved! ⚡',
+      message: `Earned +${isFirstSolve ? 100 : xpReward} XP. Current streak: ${user.streak} ${user.streak === 1 ? 'day' : 'days'}.`,
+      type: 'milestone',
+      linkUrl: '/roadmaps'
+    }, user.id);
+
     return user;
   },
 
@@ -954,24 +959,86 @@ export const StorageService = {
     return disc;
   },
 
-  getNotifications(): NotificationItem[] {
+  getNotifications(userId?: string): NotificationItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      if (data) return JSON.parse(data);
+      const user = userId ? { id: userId } : this.getCurrentUser();
+      const userKey = user ? `${STORAGE_KEYS.NOTIFICATIONS}_${user.id}` : null;
+      
+      // Check user-scoped notifications first, then fallback to global key
+      let data = userKey ? localStorage.getItem(userKey) : null;
+      if (!data) {
+        data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      }
+
+      if (data) {
+        const parsed: NotificationItem[] = JSON.parse(data);
+        // Cleanse any legacy demo notifications that might be in browser localStorage
+        const filtered = parsed.filter(n => {
+          const msg = (n.message || '').toLowerCase();
+          const title = (n.title || '').toLowerCase();
+          return (
+            !msg.includes('devon') &&
+            !msg.includes('18 consecutive') &&
+            !msg.includes('sprint #48') &&
+            !msg.includes('speed solver') &&
+            !title.includes('biweekly contest') &&
+            !n.id.startsWith('notif-2') &&
+            !n.id.startsWith('notif-3') &&
+            !n.id.startsWith('notif-4')
+          );
+        });
+
+        // Save sanitized list back
+        const targetKey = userKey || STORAGE_KEYS.NOTIFICATIONS;
+        if (filtered.length !== parsed.length) {
+          localStorage.setItem(targetKey, JSON.stringify(filtered));
+          // Clean the old global key if it has demo items
+          if (userKey && localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
+            localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
+          }
+        }
+        return filtered;
+      }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_NOTIFICATIONS;
+    return [];
   },
 
-  markAllNotificationsRead(): NotificationItem[] {
-    const notifs = this.getNotifications().map(n => ({ ...n, read: true }));
+  addNotification(
+    notif: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>, 
+    userId?: string
+  ): NotificationItem[] {
     try {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs));
+      const user = userId ? { id: userId } : this.getCurrentUser();
+      const key = user ? `${STORAGE_KEYS.NOTIFICATIONS}_${user.id}` : STORAGE_KEYS.NOTIFICATIONS;
+      const current = this.getNotifications(user?.id);
+      const newNotif: NotificationItem = {
+        ...notif,
+        id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        read: false,
+        timestamp: 'Just now'
+      };
+      const updated = [newNotif, ...current].slice(0, 25);
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    } catch (e) {
+      console.error('Error adding notification:', e);
+      return [];
+    }
+  },
+
+  markAllNotificationsRead(userId?: string): NotificationItem[] {
+    try {
+      const user = userId ? { id: userId } : this.getCurrentUser();
+      const key = user ? `${STORAGE_KEYS.NOTIFICATIONS}_${user.id}` : STORAGE_KEYS.NOTIFICATIONS;
+      const notifs = this.getNotifications(user?.id).map(n => ({ ...n, read: true }));
+      localStorage.setItem(key, JSON.stringify(notifs));
+      return notifs;
     } catch (e) {
       console.error(e);
+      return [];
     }
-    return notifs;
   },
 
   getSettings(): EditorSettings {

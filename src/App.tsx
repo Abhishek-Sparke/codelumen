@@ -58,6 +58,14 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView, activeProblemId]);
 
+  useEffect(() => {
+    if (currentUser) {
+      setNotifications(StorageService.getNotifications(currentUser.id));
+    } else {
+      setNotifications([]);
+    }
+  }, [currentUser?.id]);
+
   // Section 12: Protected Routes list
   const protectedViews = [
     'dashboard', 'problems', 'workspace', 'roadmaps', 
@@ -119,21 +127,15 @@ export function App() {
     setIsLoggedIn(false);
     setIsOnboardingOpen(false);
     setCurrentView('landing');
-    setNotifications([
-      {
-        id: 'logout-' + Date.now(),
-        title: 'Logged Out',
-        message: 'You have safely signed out of CodeSpark.',
-        type: 'streak',
-        read: false,
-        timestamp: 'Just now'
-      }
-    ]);
+    setNotifications([]);
   };
 
   const handleSolveProblem = (problemId: string, xpReward: number) => {
     const updated = StorageService.recordProblemSolve(problemId, xpReward);
-    if (updated) setCurrentUser({ ...updated });
+    if (updated) {
+      setCurrentUser({ ...updated });
+      setNotifications(StorageService.getNotifications(updated.id));
+    }
   };
 
   const handleToggleSaveProblem = (problemId: string) => {
@@ -143,7 +145,7 @@ export function App() {
   };
 
   const handleMarkNotificationsRead = () => {
-    const notifs = StorageService.markAllNotificationsRead();
+    const notifs = StorageService.markAllNotificationsRead(currentUser?.id);
     setNotifications(notifs);
   };
 
@@ -152,6 +154,7 @@ export function App() {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setIsAuthOpen(false);
+    setNotifications(StorageService.getNotifications(user.id));
 
     // If new user or onboarding not completed, route to onboarding wizard
     if (isNewUser || !user.onboarding_completed) {
