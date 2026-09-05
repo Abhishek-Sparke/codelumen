@@ -136,6 +136,31 @@ export const StorageService = {
     }
   },
 
+  isAuthenticated(): boolean {
+    try {
+      const auth = localStorage.getItem('codelumen_authenticated');
+      return auth !== null ? auth === 'true' : true;
+    } catch {
+      return true;
+    }
+  },
+
+  setAuthenticated(val: boolean): void {
+    try {
+      localStorage.setItem('codelumen_authenticated', val ? 'true' : 'false');
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  logout(): void {
+    try {
+      localStorage.setItem('codelumen_authenticated', 'false');
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
   getAllUsers(): UserProfile[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ALL_USERS);

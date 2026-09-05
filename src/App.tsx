@@ -33,9 +33,11 @@ export function App() {
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
   const [currentUser, setCurrentUser] = useState<UserProfile>(StorageService.getCurrentUser());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(StorageService.isAuthenticated());
   const [notifications, setNotifications] = useState(StorageService.getNotifications());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   useEffect(() => {
@@ -63,6 +65,27 @@ export function App() {
     }
   };
 
+  const handleOpenAuth = (mode: 'login' | 'signup' = 'login') => {
+    setAuthInitialMode(mode);
+    setIsAuthOpen(true);
+  };
+
+  const handleLogout = () => {
+    StorageService.logout();
+    setIsLoggedIn(false);
+    setNotifications([
+      {
+        id: 'logout-' + Date.now(),
+        title: 'Logged Out',
+        message: 'You have safely signed out. Your solved problems and progress remain saved.',
+        type: 'badge',
+        read: false,
+        timestamp: 'Just now'
+      },
+      ...notifications
+    ]);
+  };
+
   const handleSolveProblem = (problemId: string, xpReward: number) => {
     const updated = StorageService.recordProblemSolve(problemId, xpReward);
     setCurrentUser({ ...updated });
@@ -84,8 +107,13 @@ export function App() {
       ...partialUser
     };
     StorageService.saveCurrentUser(updated);
+    StorageService.setAuthenticated(true);
     setCurrentUser(updated);
-    setCurrentView('dashboard');
+    setIsLoggedIn(true);
+    setIsAuthOpen(false);
+    if (currentView === 'signin' || currentView === 'signup') {
+      setCurrentView('dashboard');
+    }
   };
 
   const handleOnboardingComplete = (updated: Partial<UserProfile>) => {
@@ -105,15 +133,19 @@ export function App() {
     <div className="min-h-screen bg-[#09090c] text-[#ededf0] flex flex-col selection:bg-amber-500/20 selection:text-amber-200">
       
       {/* Global Navigation Bar */}
-      <Navbar
-        currentView={currentView}
-        onNavigate={handleNavigate}
-        currentUser={currentUser}
-        notifications={notifications}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onMarkNotificationsRead={handleMarkNotificationsRead}
-      />
+      {currentView !== 'signin' && currentView !== 'signup' && (
+        <Navbar
+          currentView={currentView}
+          onNavigate={handleNavigate}
+          currentUser={currentUser}
+          notifications={notifications}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenAuth={handleOpenAuth}
+          onMarkNotificationsRead={handleMarkNotificationsRead}
+          isLoggedIn={isLoggedIn}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Main View Router */}
       <main className="flex-1 flex flex-col">
@@ -217,18 +249,32 @@ export function App() {
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
+
+        {(currentView === 'signin' || currentView === 'signup') && (
+          <AuthModal
+            isOpen={true}
+            isFullScreen={true}
+            initialMode={currentView === 'signup' ? 'signup' : 'login'}
+            onClose={() => handleNavigate('landing')}
+            onNavigateHome={() => handleNavigate('landing')}
+            onSuccess={handleAuthSuccess}
+            onOpenOnboarding={() => setIsOnboardingOpen(true)}
+          />
+        )}
       </main>
 
       {/* Global Footer (hidden only inside workspace to maximize editor viewport) */}
-      {currentView !== 'workspace' && (
+      {currentView !== 'workspace' && currentView !== 'signin' && currentView !== 'signup' && (
         <Footer onNavigate={handleNavigate} />
       )}
 
       {/* Mobile Bottom Navigation Bar */}
-      <MobileNav
-        currentView={currentView}
-        onNavigate={handleNavigate}
-      />
+      {currentView !== 'signin' && currentView !== 'signup' && (
+        <MobileNav
+          currentView={currentView}
+          onNavigate={handleNavigate}
+        />
+      )}
 
       {/* Global Command Palette Search Modal */}
       <CommandPalette
@@ -243,6 +289,7 @@ export function App() {
         onClose={() => setIsAuthOpen(false)}
         onSuccess={handleAuthSuccess}
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
+        initialMode={authInitialMode}
       />
 
       {/* Onboarding Wizard Modal */}
