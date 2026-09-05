@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   Flame, CheckCircle2, Award, Trophy, ArrowRight, Play, 
   Clock, Compass, Sparkles, TrendingUp, ChevronRight, BookOpen, 
@@ -8,6 +8,11 @@ import { UserProfile, Problem } from '../../types';
 import { ALL_PROBLEMS } from '../../data/problems';
 import { ROADMAP_STAGES } from '../../data/roadmaps';
 import { StorageService } from '../../services/storage';
+import { 
+  ROADMAP_SECTIONS_DATA, 
+  ROADMAP_PROBLEMS_MAPPING, 
+  ProblemDatabase 
+} from '../../services/problemDatabase';
 
 interface UserDashboardProps {
   currentUser: UserProfile;
@@ -88,8 +93,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 {currentUser.experienceLevel || 'Beginner'}
               </span>
             </div>
-            <p className="mt-1 text-sm sm:text-base text-white/50">
-              Your journey starts here.
+            <p className="mt-1 text-sm sm:text-base text-amber-400/90 font-medium">
+              Your first spark is waiting. ⚡
             </p>
           </div>
 
@@ -430,7 +435,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400">
                 <Compass className="h-4 w-4" />
-                <span>Continue learning</span>
+                <span>Continue where you left off</span>
               </div>
               <span className="text-xs text-white/40 font-mono">Stage 01</span>
             </div>

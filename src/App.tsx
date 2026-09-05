@@ -24,6 +24,7 @@ import { LeaderboardView } from './components/leaderboard/LeaderboardView';
 import { ContestsView } from './components/contests/ContestsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { AdminView } from './components/admin/AdminView';
+import { SavedProblemsView } from './components/problems/SavedProblemsView';
 import { FirstLessonModal } from './components/lesson/FirstLessonModal';
 import { SkillAssessmentModal } from './components/assessment/SkillAssessmentModal';
 
@@ -61,7 +62,8 @@ export function App() {
   const protectedViews = [
     'dashboard', 'problems', 'workspace', 'roadmaps', 
     'patterns', 'profile', 'settings', 'submissions', 
-    'contests', 'discuss', 'leaderboard', 'admin'
+    'contests', 'discuss', 'leaderboard', 'admin',
+    'saved', 'saved-problems'
   ];
 
   // Route protection watcher
@@ -91,9 +93,15 @@ export function App() {
       if (param) setActivePatternId(param);
       setCurrentView('patterns');
     } else if (view === 'problems') {
-      if (param) setProblemFilterCategory(param);
-      else setProblemFilterCategory('all');
-      setCurrentView('problems');
+      if (param === 'saved') {
+        setCurrentView('saved-problems');
+      } else {
+        if (param) setProblemFilterCategory(param);
+        else setProblemFilterCategory('all');
+        setCurrentView('problems');
+      }
+    } else if (view === 'saved' || view === 'saved-problems') {
+      setCurrentView('saved-problems');
     } else {
       setCurrentView(view);
     }
@@ -254,6 +262,14 @@ export function App() {
           <ProblemLibrary
             currentUser={currentUser}
             initialFilter={problemFilterCategory}
+            onNavigate={handleNavigate}
+            onToggleSave={handleToggleSaveProblem}
+          />
+        )}
+
+        {currentView === 'saved-problems' && currentUser && (
+          <SavedProblemsView
+            currentUser={currentUser}
             onNavigate={handleNavigate}
             onToggleSave={handleToggleSaveProblem}
           />

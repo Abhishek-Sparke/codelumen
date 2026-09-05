@@ -1,6 +1,8 @@
 import { 
   UserProfile, Submission, DiscussionPost, NotificationItem,
-  UserProfileRecord, UserPreferencesRecord, UserProgressRecord, OnboardingProgressRecord 
+  UserProfileRecord, UserPreferencesRecord, UserProgressRecord, OnboardingProgressRecord,
+  UserProblemProgressRecord, SavedProblemRecord, SubmissionRecord, SubmissionDraftRecord,
+  XpTransactionRecord, UserActivityRecord, SupportedLanguage
 } from '../types';
 import { SAMPLE_USERS } from '../data/users';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
@@ -14,7 +16,12 @@ const STORAGE_KEYS = {
   NOTIFICATIONS: 'codespark_notifications',
   SETTINGS: 'codespark_settings',
   AUTH_ACCOUNTS: 'codespark_auth_accounts',
-  AUTH_STATE: 'codespark_authenticated'
+  AUTH_STATE: 'codespark_authenticated',
+  USER_PROBLEM_PROGRESS: 'codespark_user_problem_progress',
+  SAVED_PROBLEMS: 'codespark_saved_problems',
+  SUBMISSION_DRAFTS: 'codespark_submission_drafts',
+  XP_TRANSACTIONS: 'codespark_xp_transactions',
+  USER_ACTIVITY: 'codespark_user_activity'
 };
 
 export interface EditorSettings {
@@ -526,11 +533,70 @@ export const StorageService = {
     return { isFollowing: !isFollowing, current };
   },
 
+  // ===========================================================================
+  // USER PROBLEM PROGRESS (SECTION 17)
+  // ===========================================================================
+  getAllUserProblemProgress(userId: string): Record<string, UserProblemProgressRecord> {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.USER_PROBLEM_PROGRESS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching problem progress:', e);
+    }
+    return {};
+  },
+
+  getUserProblemProgress(userId: string, problemId: string): UserProblemProgressRecord | null {
+    const all = this.getAllUserProblemProgress(userId);
+    return all[problemId] || null;
+  },
+
+  recordProblemAttempt(userId: string, problemId: string): UserProblemProgressRecord {
+    const all = this.getAllUserProblemProgress(userId);
+    const now = new Date().toISOString();
+    const existing = all[problemId];
+
+    const updated: UserProblemProgressRecord = existing ? {
+      ...existing,
+      status: existing.status === 'solved' ? 'solved' : 'attempted',
+      attempt_count: (existing.attempt_count || 0) + 1,
+      last_attempted_at: now,
+      updated_at: now
+    } : {
+      id: `upp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      user_id: userId,
+      problem_id: problemId,
+      status: 'attempted',
+      attempt_count: 1,
+      last_attempted_at: now,
+      created_at: now,
+      updated_at: now
+    };
+
+    all[problemId] = updated;
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.USER_PROBLEM_PROGRESS}_${userId}`, JSON.stringify(all));
+    } catch (e) {
+      console.error('Error saving problem progress:', e);
+    }
+
+    // Update currentUser attempted list
+    const user = this.getCurrentUser();
+    if (user && user.id === userId && !user.attemptedProblemIds.includes(problemId)) {
+      user.attemptedProblemIds.push(problemId);
+      this.saveCurrentUser(user);
+    }
+
+    this.recordActivity(userId, 'problem_attempted', problemId);
+    return updated;
+  },
+
   recordProblemSolve(problemId: string, xpReward = 50): UserProfile | null {
     const user = this.getCurrentUser();
     if (!user) return null;
 
     const isFirstSolve = user.solvedProblemIds.length === 0;
+    const now = new Date().toISOString();
 
     if (!user.solvedProblemIds.includes(problemId)) {
       user.solvedProblemIds.push(problemId);
@@ -544,25 +610,53 @@ export const StorageService = {
         }
         user.journeyState = 'first_solve';
         user.firstSolveCelebrated = false;
+        this.recordXpTransaction(user.id, 100, 'problem_solved', 'problem', problemId);
+        this.recordActivity(user.id, 'badge_earned', 'first-solve');
       } else {
         user.xp += xpReward;
         user.streak = Math.max(1, user.streak);
         user.longestStreak = Math.max(user.streak, user.longestStreak);
         user.journeyState = 'active_learner';
+        this.recordXpTransaction(user.id, xpReward, 'problem_solved', 'problem', problemId);
       }
       
-      const today = new Date().toISOString().split('T')[0];
+      const today = now.split('T')[0];
       user.activityCalendar[today] = (user.activityCalendar[today] || 0) + 1;
       
       if (user.solvedProblemIds.length >= 10 && !user.badges.includes('solve-10')) {
         user.badges.push('solve-10');
+        this.recordActivity(user.id, 'badge_earned', 'solve-10');
       }
       if (user.solvedProblemIds.length >= 50 && !user.badges.includes('solve-50')) {
         user.badges.push('solve-50');
+        this.recordActivity(user.id, 'badge_earned', 'solve-50');
       }
 
       this.saveCurrentUser(user);
     }
+
+    // Update user_problem_progress table
+    const all = this.getAllUserProblemProgress(user.id);
+    const existing = all[problemId];
+    all[problemId] = {
+      id: existing ? existing.id : `upp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      user_id: user.id,
+      problem_id: problemId,
+      status: 'solved',
+      attempt_count: existing ? (existing.attempt_count || 0) + 1 : 1,
+      solved_at: now,
+      last_attempted_at: now,
+      created_at: existing ? existing.created_at : now,
+      updated_at: now
+    };
+
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.USER_PROBLEM_PROGRESS}_${user.id}`, JSON.stringify(all));
+    } catch (e) {
+      console.error(e);
+    }
+
+    this.recordActivity(user.id, 'problem_solved', problemId);
     return user;
   },
 
@@ -574,6 +668,7 @@ export const StorageService = {
       user.journeyState = 'first_problem';
     }
     this.saveCurrentUser(user);
+    this.recordActivity(user.id, 'lesson_completed', 'lesson-hash-maps');
     return user;
   },
 
@@ -586,17 +681,165 @@ export const StorageService = {
     return user;
   },
 
+  // ===========================================================================
+  // SAVED PROBLEMS (SECTION 18)
+  // ===========================================================================
+  getSavedProblemIds(userId: string): string[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.SAVED_PROBLEMS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching saved problems:', e);
+    }
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) return user.savedProblemIds || [];
+    return [];
+  },
+
+  saveProblem(userId: string, problemId: string): boolean {
+    const ids = this.getSavedProblemIds(userId);
+    if (!ids.includes(problemId)) {
+      ids.push(problemId);
+      try {
+        localStorage.setItem(`${STORAGE_KEYS.SAVED_PROBLEMS}_${userId}`, JSON.stringify(ids));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    const user = this.getCurrentUser();
+    if (user && user.id === userId && !user.savedProblemIds.includes(problemId)) {
+      user.savedProblemIds.push(problemId);
+      this.saveCurrentUser(user);
+    }
+    return true;
+  },
+
+  unsaveProblem(userId: string, problemId: string): boolean {
+    let ids = this.getSavedProblemIds(userId);
+    ids = ids.filter(id => id !== problemId);
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.SAVED_PROBLEMS}_${userId}`, JSON.stringify(ids));
+    } catch (e) {
+      console.error(e);
+    }
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) {
+      user.savedProblemIds = user.savedProblemIds.filter(id => id !== problemId);
+      this.saveCurrentUser(user);
+    }
+    return false;
+  },
+
+  isProblemSaved(userId: string, problemId: string): boolean {
+    const ids = this.getSavedProblemIds(userId);
+    return ids.includes(problemId);
+  },
+
   toggleSaveProblem(problemId: string): boolean {
     const user = this.getCurrentUser();
     if (!user) return false;
-    const isSaved = user.savedProblemIds.includes(problemId);
+    const isSaved = this.isProblemSaved(user.id, problemId);
     if (isSaved) {
-      user.savedProblemIds = user.savedProblemIds.filter(id => id !== problemId);
+      return this.unsaveProblem(user.id, problemId);
     } else {
-      user.savedProblemIds.push(problemId);
+      return this.saveProblem(user.id, problemId);
     }
-    this.saveCurrentUser(user);
-    return !isSaved;
+  },
+
+  // ===========================================================================
+  // SUBMISSION DRAFTS (SECTION 22)
+  // ===========================================================================
+  saveDraft(userId: string, problemId: string, language: SupportedLanguage, code: string): void {
+    try {
+      const key = `${STORAGE_KEYS.SUBMISSION_DRAFTS}_${userId}_${problemId}_${language}`;
+      const record: SubmissionDraftRecord = {
+        user_id: userId,
+        problem_id: problemId,
+        language,
+        code,
+        updated_at: new Date().toISOString()
+      };
+      localStorage.setItem(key, JSON.stringify(record));
+    } catch (e) {
+      console.error('Error saving draft:', e);
+    }
+  },
+
+  getDraft(userId: string, problemId: string, language: SupportedLanguage): string | null {
+    try {
+      const key = `${STORAGE_KEYS.SUBMISSION_DRAFTS}_${userId}_${problemId}_${language}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed: SubmissionDraftRecord = JSON.parse(raw);
+        return parsed.code;
+      }
+    } catch (e) {
+      console.error('Error reading draft:', e);
+    }
+    return null;
+  },
+
+  // ===========================================================================
+  // ACTIVITY & XP TRANSACTIONS (SECTIONS 30 & 31)
+  // ===========================================================================
+  recordActivity(userId: string, type: UserActivityRecord['activity_type'], refId: string): void {
+    try {
+      const key = `${STORAGE_KEYS.USER_ACTIVITY}_${userId}`;
+      const raw = localStorage.getItem(key);
+      const list: UserActivityRecord[] = raw ? JSON.parse(raw) : [];
+      list.unshift({
+        id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        activity_type: type,
+        reference_id: refId,
+        created_at: new Date().toISOString()
+      });
+      localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
+    } catch (e) {
+      console.error('Error recording activity:', e);
+    }
+  },
+
+  getUserActivity(userId: string): UserActivityRecord[] {
+    try {
+      const key = `${STORAGE_KEYS.USER_ACTIVITY}_${userId}`;
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error reading activity:', e);
+    }
+    return [];
+  },
+
+  recordXpTransaction(userId: string, amount: number, reason: XpTransactionRecord['reason'], refType: string, refId: string): void {
+    try {
+      const key = `${STORAGE_KEYS.XP_TRANSACTIONS}_${userId}`;
+      const raw = localStorage.getItem(key);
+      const list: XpTransactionRecord[] = raw ? JSON.parse(raw) : [];
+      list.unshift({
+        id: `xp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        amount,
+        reason,
+        reference_type: refType,
+        reference_id: refId,
+        created_at: new Date().toISOString()
+      });
+      localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
+    } catch (e) {
+      console.error('Error recording XP transaction:', e);
+    }
+  },
+
+  getUserXpTransactions(userId: string): XpTransactionRecord[] {
+    try {
+      const key = `${STORAGE_KEYS.XP_TRANSACTIONS}_${userId}`;
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error reading XP transactions:', e);
+    }
+    return [];
   },
 
   getSubmissions(): Submission[] {
@@ -617,6 +860,17 @@ export const StorageService = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  getSubmissionsForProblem(problemId: string): Submission[] {
+    const subs = this.getSubmissions();
+    return subs.filter(s => s.problemId === problemId);
+  },
+
+  getUserSubmissions(problemId?: string): Submission[] {
+    const subs = this.getSubmissions();
+    if (!problemId) return subs;
+    return subs.filter(s => s.problemId === problemId);
   },
 
   getDiscussions(): DiscussionPost[] {

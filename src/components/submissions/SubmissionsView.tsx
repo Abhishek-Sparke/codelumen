@@ -46,7 +46,7 @@ export const SubmissionsView: React.FC = () => {
               {submissions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-16 text-center text-xs text-white/40">
-                    No submissions recorded yet. Your first solve is waiting!
+                    No submissions yet.
                   </td>
                 </tr>
               ) : (

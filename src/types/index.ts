@@ -3,6 +3,7 @@ export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 export type SupportedLanguage = 'python' | 'javascript' | 'cpp' | 'java' | 'go' | 'rust';
 
 export type SubmissionStatus = 
+  | 'Pending'
   | 'Accepted' 
   | 'Wrong Answer' 
   | 'Time Limit Exceeded' 
@@ -192,6 +193,11 @@ export interface Problem {
   hints: ProblemHint[];
   editorial: ProblemEditorial;
   similarProblemIds: string[];
+  estimatedTime?: string;
+  isPublished?: boolean;
+  inputFormat?: string;
+  outputFormat?: string;
+  notes?: string;
   timeLimitMs?: number;
   memoryLimitMb?: number;
 }
@@ -312,3 +318,158 @@ export interface AICoachMessage {
   hintLevel?: 1 | 2 | 3;
   codeSnippet?: string;
 }
+
+// =============================================================================
+// PHASE 2 DATABASE SCHEMAS & RELATIONAL MODELS
+// =============================================================================
+
+export interface TopicRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+}
+
+export interface PatternRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  when_to_use: string[];
+  common_signals: string[];
+  created_at: string;
+}
+
+export interface ProblemRecord {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  difficulty: Difficulty;
+  estimated_time: string;
+  acceptance_rate: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+  input_format?: string;
+  output_format?: string;
+  notes?: string;
+}
+
+export interface ProblemTopicRecord {
+  problem_id: string;
+  topic_id: string;
+}
+
+export interface ProblemPatternRecord {
+  problem_id: string;
+  pattern_id: string;
+}
+
+export interface ProblemHintRecord {
+  id: string;
+  problem_id: string;
+  hint_number: number;
+  content: string;
+}
+
+export interface ProblemStarterCodeRecord {
+  problem_id: string;
+  language: SupportedLanguage;
+  code: string;
+}
+
+export interface ProblemSolutionRecord {
+  id: string;
+  problem_id: string;
+  approach_name: string;
+  explanation: string;
+  complexity: {
+    time: string;
+    space: string;
+  };
+  code_by_language: Record<string, string>;
+  created_at: string;
+}
+
+export interface RoadmapRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  created_at: string;
+}
+
+export interface RoadmapSectionRecord {
+  id: string;
+  roadmap_id: string;
+  name: string;
+  description: string;
+  position: number;
+}
+
+export interface RoadmapProblemRecord {
+  roadmap_section_id: string;
+  problem_id: string;
+  position: number;
+  is_required: boolean;
+}
+
+export interface UserProblemProgressRecord {
+  id: string;
+  user_id: string;
+  problem_id: string;
+  status: 'unattempted' | 'attempted' | 'solved';
+  attempt_count: number;
+  solved_at?: string;
+  last_attempted_at?: string;
+  best_runtime?: number;
+  best_memory?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedProblemRecord {
+  user_id: string;
+  problem_id: string;
+  created_at: string;
+}
+
+export interface SubmissionRecord {
+  id: string;
+  user_id: string;
+  problem_id: string;
+  language: SupportedLanguage;
+  code: string;
+  status: SubmissionStatus;
+  runtime: number;
+  memory: number;
+  created_at: string;
+}
+
+export interface SubmissionDraftRecord {
+  user_id: string;
+  problem_id: string;
+  language: SupportedLanguage;
+  code: string;
+  updated_at: string;
+}
+
+export interface XpTransactionRecord {
+  id: string;
+  user_id: string;
+  amount: number;
+  reason: 'problem_solved' | 'lesson_completed' | 'daily_challenge' | 'roadmap_completed' | 'badge_earned';
+  reference_type: string;
+  reference_id: string;
+  created_at: string;
+}
+
+export interface UserActivityRecord {
+  id: string;
+  user_id: string;
+  activity_type: 'problem_attempted' | 'problem_solved' | 'submitted_solution' | 'lesson_completed' | 'roadmap_completed' | 'badge_earned';
+  reference_id: string;
+  created_at: string;
+}
+

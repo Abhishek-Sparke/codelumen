@@ -258,7 +258,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
             {isZeroProgress ? (
               <p className="text-center text-xs text-white/40 py-2 border-t border-white/[0.04]">
-                Start solving to build your coding profile.
+                Your CodeSpark journey starts with your first solve.
               </p>
             ) : (
               <div className="flex items-center justify-between text-[11px] text-white/40 pt-2 border-t border-white/[0.04]">
