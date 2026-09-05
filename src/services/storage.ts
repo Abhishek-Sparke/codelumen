@@ -429,6 +429,49 @@ export const StorageService = {
     return account?.onboarding || null;
   },
 
+  getUserProfileRecord(userId: string): UserProfileRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    return account?.profile || null;
+  },
+
+  getUserPreferencesRecord(userId: string): UserPreferencesRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    return account?.preferences || null;
+  },
+
+  updateUserPreferencesRecord(userId: string, prefs: Partial<UserPreferencesRecord>): UserPreferencesRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    if (!account) return null;
+    account.preferences = {
+      ...account.preferences,
+      ...prefs
+    };
+    this.saveAuthAccounts(accounts);
+    return account.preferences;
+  },
+
+  getUserProgressRecord(userId: string): UserProgressRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    return account?.progress || null;
+  },
+
+  updateUserProgressRecord(userId: string, prog: Partial<UserProgressRecord>): UserProgressRecord | null {
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.id === userId || a.user.id === userId);
+    if (!account) return null;
+    account.progress = {
+      ...account.progress,
+      ...prog,
+      updated_at: new Date().toISOString()
+    };
+    this.saveAuthAccounts(accounts);
+    return account.progress;
+  },
+
   completeOnboarding(userId: string, finalData: Partial<UserProfile>): UserProfile | null {
     const accounts = this.getAuthAccounts();
     const account = accounts.find(a => a.id === userId || a.user.id === userId);
