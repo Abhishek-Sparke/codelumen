@@ -2,88 +2,94 @@
 
 **Document**: `docs/phase-3-change-plan.md`  
 **Date**: September 6, 2026  
-**Scope**: Systematic rollout, risk evaluation, and verification gates
+**Scope**: Development DAG, Gated Release Order, Risk Evaluation, and Verification Milestones
 
 ---
 
-## 1. Objectives
+## 1. Architectural Strategy: Development Order vs. Release Order
 
-1. Enable authoritative, isolated code execution for Python 3 and JavaScript.
-2. Provide deterministic judging with masked hidden test cases.
-3. Transition execution job statuses: `queued` → `running` → `completed` / `failed`.
-4. Update user progress, XP, and streak strictly upon `ACCEPTED` submissions.
-5. Provide multi-level rollback capabilities through feature flags and additive schemas.
+To prevent circular dependencies and premature execution risks, implementation and release are formally separated:
 
----
+* **Development Order (Build DAG)**: Dictated by bottom-up technical dependencies. Primitives, types, security sandboxing, and judge engines are built and unit-tested before API endpoints and workspace UI.
+* **Release Order (Gated Tranches)**: Dictated by feature flags (`CODE_EXECUTION_ENABLED`, `PYTHON_EXECUTION_ENABLED`, `SPARK_AI_ENABLED`) and observability gates. Features are deployed dark, verified in staging, enabled in beta run mode, and then promoted to full judging and progress.
 
-## 2. Step-by-Step Change Breakdown
-
-### Step 1: Project Audit & Baseline Preservation
-* Deliverable: `docs/phase-3-audit.md`, `docs/phase-3-change-plan.md`.
-* Verification: 100% auth & schema preservation verified.
-
-### Step 2: Phase 2 Data Model Validation & Migration
-* Deliverable: `database/migrations/001_phase3_execution_jobs.sql`, `docs/phase-3-schema.md`.
-* Risk Mitigation: Additive table only. No alteration to existing user or problem tables.
-
-### Step 3: Execution Service Abstraction
-* Deliverable: Normalized `ExecutionService` with `runCode()`, `submitCode()`, and `getExecutionStatus()`.
-* Risk Mitigation: Interface decouples frontend from specific backend runner.
-
-### Step 4: Sandbox Isolation & Security
-* Deliverable: `server/isolatedRunner.ts`, `docs/execution-security.md`.
-* Risk Mitigation: Subprocess isolation, 2.5s CPU timeout, 256 MB memory cap, 256 KB output ceiling, stripped environment.
-
-### Step 5: Python Run API
-* Deliverable: `POST /api/code/run` executing public test cases only.
-* Risk Mitigation: Run requests do not touch `user_problem_progress` or award XP.
-
-### Step 6: Test Result UI
-* Deliverable: Upgraded results panel in `ProblemWorkspace.tsx` with tabs for test cases, console stdout/stderr, and past submissions.
-
-### Step 7: Submission & Execution Jobs
-* Deliverable: `POST /api/code/submit` generating unique `submission_id` and `job_id`, transitioning job state to terminal status.
-
-### Step 8: Deterministic Judge Engine
-* Deliverable: `src/services/execution/judgeEngine.ts` evaluating test outcomes into normalized verdicts (`ACCEPTED`, `WRONG_ANSWER`, `TIME_LIMIT_EXCEEDED`, `MEMORY_LIMIT_EXCEEDED`, `RUNTIME_ERROR`, `COMPILATION_ERROR`, `SYSTEM_ERROR`).
-
-### Step 9: Submission History
-* Deliverable: Scoped submission viewer in workspace allowing inspection of past code submissions.
-
-### Step 10: Solved Status Updates
-* Deliverable: First `ACCEPTED` verdict sets `user_problem_progress.status = 'solved'`.
-
-### Step 11: XP Ledger
-* Deliverable: Easy (+100 XP), Medium (+200 XP), Hard (+300 XP) awarded on first solve only; duplicate solves award 0 XP.
-
-### Step 12: Activity & Streak Tracking
-* Deliverable: `docs/streak-rules.md`. Maximum 1 streak increment per calendar date.
-
-### Step 13: Dynamic Roadmap Progress
-* Deliverable: Dynamic % calculation in `RoadmapView.tsx` derived from verified solves.
-
-### Step 14: 5-Tier Next Problem Recommendation
-* Deliverable: `src/services/recommendationService.ts` providing deterministic recommendations with 100% fallback reliability.
-
-### Step 15: Multi-Language Configuration
-* Deliverable: Python 3 and JavaScript enabled; C++ and Java safely gated via feature flags.
-
-### Step 16 & 17: Editor & Draft Autosave
-* Deliverable: `src/services/draftService.ts` maintaining separate drafts per user, problem, and language.
-
-### Step 18: Spark AI Hooks
-* Deliverable: `src/services/sparkAIService.ts` providing sanitized AI actions.
-
-### Step 19 & 20: Security & Performance Audit
-* Deliverable: `docs/phase-3-security-report.md`, `docs/phase-3-performance-report.md`.
-
-### Step 21 & 22: UI Polish & End-to-End Verification
-* Deliverable: Accessible UI with no horizontal overflow; 15/15 automated tests passing; `docs/phase-3-final-report.md`.
+Full dependency analysis and contradiction resolutions are documented in [`docs/phase-3-dependency-graph.md`](file:///c:/Users/abhis/.gemini/antigravity-ide/scratch/codelumen/docs/phase-3-dependency-graph.md).
 
 ---
 
-## 3. Rollback & Reversibility Strategy
+## 2. Technical Development Order (Acyclic DAG)
 
-* **Execution Provider Rollback**: Set `CODE_EXECUTION_ENABLED=false`. CodeSpark remains fully usable for reading lessons, viewing roadmaps, and browsing problems.
-* **Database Rollback**: Run `database/migrations/001_phase3_execution_jobs.down.sql` dropping `codespark_execution_jobs`.
-* **Deployment Rollback**: Revert git commit on `main` branch or instant roll back via Vercel dashboard.
+### Layer 0: Contracts & Foundation
+* **Step 1**: Project Audit & Baseline Preservation (`docs/phase-3-audit.md`).
+* **Step 2**: Additive Database Migration (`database/migrations/001_phase3_execution_jobs.sql`).
+* **Step 3**: Types & Execution Service Abstraction (`IExecutionProvider`).
+
+### Layer 1: Core Sandboxed Engines (Headless & Verifiable)
+* **Step 2b**: Test Case Repository (Public vs Hidden separation).
+* **Step 4**: Isolated Sandbox Runners (Python 3.14 / Node.js with CPU/memory/output bounds).
+* **Step 8**: Deterministic Judge Engine (Evaluating stdout against expected fixtures, hidden test masking).
+
+### Layer 2: Client State & Data Services
+* **Step 16a**: Editor primitives (tab indentation, font size, reset).
+* **Step 17**: `DraftService` (autosave, language-specific draft isolation).
+* **Step 10-12**: Progress & Reward Service (atomic solve updates, XP ledger, calendar-locked streak).
+* **Step 13**: Roadmap Progress Calculator (exact percentages).
+* **Step 14**: `RecommendationService` (deterministic 5-tier recommendation engine).
+
+### Layer 3: API & Orchestration Layer
+* **Step 5**: `POST /api/code/run` (Public test debugging endpoint).
+* **Step 7**: `POST /api/code/submit` & Execution Jobs (Queue state machine).
+* **Step 18**: `SparkAIService` (Sanitized context, zero hidden test exposure).
+* **Step 3b**: Circuit Breaker & Rate Limiter (3-failure threshold, 30s cooldown fallback).
+
+### Layer 4: Workspace UI Integration
+* **Step 6**: Results Panel UI (`Test Cases`, `Console`, `Submissions` tabs).
+* **Step 9**: Submission History Tab & Code Viewer.
+* **Step 16b**: Language Selector & Unsaved Changes Confirmation Modal.
+* **Step 21**: UI Polish, Accessibility, Responsive Mobile Layout.
+* **Step 10b**: "Problem Solved ⚡" Celebration Modal & Next Problem Action.
+
+### Layer 5: Verification & Hardening
+* **Step 19**: Comprehensive Security Sandbox Audit (8/8 attack vectors).
+* **Step 20**: Performance & Load Benchmark (50 concurrent requests).
+* **Step 22**: Complete End-to-End User Journey Tests (New user flow & Failed user flow).
+
+---
+
+## 3. Production Release Order (Gated Rollout Tranches)
+
+```text
+Tranche 0 (Dark Launch)
+Migrations + Endpoints deployed behind flags (CODE_EXECUTION_ENABLED = false)
+        │
+        ▼ Gate 1: DB & API health checks pass 100%
+Tranche 1 (Internal Staging)
+Synthetic tests run against staging (0 sandbox escapes, 50 reqs pass)
+        │
+        ▼ Gate 2: Security & Load test pass rates = 100%
+Tranche 2 (Public Beta Run Mode)
+CODE_EXECUTION_ENABLED = true, PYTHON_EXECUTION_ENABLED = true, JS_EXECUTION_ENABLED = true
+Run button active on public tests. Submit disabled. 0 risk to user progress.
+        │
+        ▼ Gate 3: Error rate < 1%, zero host process crashes
+Tranche 3 (Full Submit & Progress - Core Launch)
+Submit button active. Full judging + Solved status + XP + Streaks + Roadmap %.
+Circuit breaker active with 30s cooldown fallback.
+        │
+        ▼ Gate 4: Zero false ACCEPTED, zero lost submissions
+Tranche 4 (Spark AI Enhancement)
+SPARK_AI_ENABLED = true. Sanitized context only; graceful fallback on failure.
+        │
+        ▼ Gate 5: Additional Language Promotion
+Tranche 5 (C++ / Java Multi-Language)
+Promoted independently only when compiler sandbox containers pass Gate 5.
+```
+
+---
+
+## 4. Rollback & Reversibility Strategy
+
+* **Instant Execution Rollback**: In `src/services/featureFlags.ts` (or console): set `CODE_EXECUTION_ENABLED=false`. CodeSpark remains fully operational for problem browsing, roadmaps, lessons, and draft autosave.
+* **Language Rollback**: Set `PYTHON_EXECUTION_ENABLED=false` or `JS_EXECUTION_ENABLED=false` to disable an individual language without affecting the other.
+* **Database Rollback**: Apply `001_phase3_execution_jobs.down.sql` dropping `codespark_execution_jobs` with zero impact on user progress or authentication.
+* **Deployment Rollback**: Instant reversion via Git commit or Vercel dashboard.
