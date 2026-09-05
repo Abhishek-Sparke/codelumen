@@ -245,38 +245,95 @@ export interface PatternGuide {
   advancedProblemIds: string[];
 }
 
+export type ForumSectionId = 'learn' | 'programming' | 'career' | 'community';
+export type ForumUserRole = 'Member' | 'Contributor' | 'Moderator' | 'Admin';
+export type ForumReactionType = 'like' | 'love' | 'helpful' | 'great';
+
+export interface ForumAuthor {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  role?: ForumUserRole;
+  joinedDate?: string;
+  postCount?: number;
+  levelTitle?: string;
+  xp?: number;
+  problemsSolved?: number;
+}
+
+export interface ForumPostItem {
+  id: string;
+  postNumber: number;
+  author: ForumAuthor;
+  content: string;
+  createdAt: string;
+  reactions: Record<ForumReactionType, string[]>;
+  replyToPostNumber?: number;
+  replyToAuthor?: string;
+  isOriginalPost?: boolean;
+}
+
+export interface ForumCategory {
+  id: string;
+  slug: string;
+  sectionId: ForumSectionId;
+  name: string;
+  description: string;
+  iconName: string;
+  threadCount: number;
+  postCount: number;
+  latestThread?: {
+    id: string;
+    title: string;
+    authorName: string;
+    lastActivity: string;
+  };
+}
+
+export interface ForumSection {
+  id: ForumSectionId;
+  title: string;
+  description: string;
+  categories: ForumCategory[];
+}
+
 export interface DiscussionComment {
   id: string;
-  author: {
-    id: string;
-    name: string;
-    username: string;
-    avatar: string;
-  };
+  postNumber?: number;
+  author: ForumAuthor;
   content: string;
   createdAt: string;
   likes: number;
   hasLiked?: boolean;
+  reactions?: Record<ForumReactionType, string[]>;
+  replyToPostNumber?: number;
+  replyToAuthor?: string;
 }
 
 export interface DiscussionPost {
   id: string;
+  slug?: string;
   title: string;
+  categoryId?: string;
+  sectionId?: ForumSectionId;
+  categoryName?: string;
   problemId?: string;
   problemTitle?: string;
-  author: {
-    id: string;
-    name: string;
-    username: string;
-    avatar: string;
-    levelTitle: string;
-  };
+  author: ForumAuthor;
   content: string;
   tags: string[];
   likes: number;
   hasLiked?: boolean;
+  reactions?: Record<ForumReactionType, string[]>;
   commentsCount: number;
+  views?: number;
   createdAt: string;
+  lastActivityAt?: string;
+  isPinned?: boolean;
+  isLocked?: boolean;
+  watchedByUserIds?: string[];
+  bookmarkedByUserIds?: string[];
   comments: DiscussionComment[];
 }
 

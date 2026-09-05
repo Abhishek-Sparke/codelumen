@@ -41,6 +41,7 @@ export function App() {
   const [activeProblemId, setActiveProblemId] = useState<string>('p-1');
   const [activeProfileUserId, setActiveProfileUserId] = useState<string>('');
   const [activePatternId, setActivePatternId] = useState<string>('two-pointers');
+  const [activeDiscussionId, setActiveDiscussionId] = useState<string | undefined>();
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -113,6 +114,10 @@ export function App() {
       }
     } else if (view === 'saved' || view === 'saved-problems') {
       setCurrentView('saved-problems');
+    } else if (view === 'discuss') {
+      if (param) setActiveDiscussionId(param);
+      else setActiveDiscussionId(undefined);
+      setCurrentView('discuss');
     } else {
       setCurrentView(view);
     }
@@ -324,7 +329,9 @@ export function App() {
         {currentView === 'discuss' && currentUser && (
           <DiscussionsView
             currentUser={currentUser}
+            initialDiscussionId={activeDiscussionId}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
+            onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
 

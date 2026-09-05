@@ -4,7 +4,7 @@ import { ALL_PROBLEMS } from '../../data/problems';
 import { PATTERNS_DATA } from '../../data/patterns';
 import { ROADMAP_STAGES } from '../../data/roadmaps';
 import { StorageService } from '../../services/storage';
-import { SAMPLE_DISCUSSIONS } from '../../data/discussions';
+import { ForumService } from '../../services/forumService';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -73,10 +73,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     u.username.toLowerCase().includes(cleanQuery)
   ).slice(0, 3);
 
-  const matchingDiscussions = SAMPLE_DISCUSSIONS.filter(d =>
+  const matchingDiscussions = ForumService.getThreads().filter(d =>
     !cleanQuery ||
     d.title.toLowerCase().includes(cleanQuery) ||
-    d.tags.some(t => t.toLowerCase().includes(cleanQuery))
+    d.tags?.some(t => t.toLowerCase().includes(cleanQuery))
   ).slice(0, 3);
 
   const hasResults = matchingProblems.length > 0 || matchingPatterns.length > 0 || matchingRoadmaps.length > 0 || matchingUsers.length > 0 || matchingDiscussions.length > 0;
