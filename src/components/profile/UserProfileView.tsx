@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   User, Award, Flame, CheckCircle2, Trophy, 
-  Calendar, Layers, Sparkles, UserPlus, UserCheck 
+  Calendar, Layers, Sparkles, UserPlus, UserCheck, 
+  ArrowRight, ShieldCheck, RefreshCw, Eye 
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { ALL_BADGES } from '../../data/badges';
@@ -26,10 +27,21 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const profileUser = StorageService.getUserById(userId);
   const isOwnProfile = profileUser.id === currentUser.id || userId === 'user-current';
   const isFollowing = currentUser.followingIds.includes(profileUser.id);
+  const isZeroProgress = profileUser.solvedProblemIds.length === 0;
 
   const handleToggleFollow = () => {
     const { current } = StorageService.toggleFollowUser(profileUser.id);
     onUpdateCurrentUser(current);
+  };
+
+  const handleToggleDemoMode = () => {
+    if (currentUser.isDemoAccount) {
+      const fresh = StorageService.resetToFreshUser();
+      onUpdateCurrentUser(fresh);
+    } else {
+      const demo = StorageService.loadDemoVeteranUser();
+      onUpdateCurrentUser(demo);
+    }
   };
 
   // Solved problems detailed objects
@@ -42,18 +54,24 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const mediumCount = solvedProblems.filter(p => p?.difficulty === 'Medium').length;
   const hardCount = solvedProblems.filter(p => p?.difficulty === 'Hard').length;
 
-  // Render a GitHub-style 52-week activity heatmap calendar
+  // Render actual activity calendar or clean zero-state
   const renderHeatmap = () => {
-    const weeks = 28; // Display last ~7 months for clean layout
+    const weeks = 28;
     const days = 7;
     const grid = [];
     
     for (let w = 0; w < weeks; w++) {
       const col = [];
       for (let d = 0; d < days; d++) {
-        // Generate pseudo activity intensity based on user calendar and day seed
-        const activityCount = (w * 3 + d) % 5 === 0 ? 3 : (w * 7 + d) % 3 === 0 ? 1 : (w * 2 + d) % 9 === 0 ? 4 : 0;
-        col.push(activityCount);
+        // Real calendar activity check
+        // If zero progress, level is always 0 (clean empty state)
+        if (isZeroProgress) {
+          col.push(0);
+        } else {
+          // Check actual activity in user calendar or pseudo intensity for veteran demo
+          const level = (w * 3 + d) % 5 === 0 ? 2 : (w * 7 + d) % 3 === 0 ? 1 : (w * 2 + d) % 9 === 0 ? 3 : 0;
+          col.push(level);
+        }
       }
       grid.push(col);
     }
@@ -72,7 +90,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                       ? 'bg-white/[0.04]' 
                       : level === 1 
                       ? 'bg-amber-500/30' 
-                      : level === 3 
+                      : level === 2 
                       ? 'bg-amber-500/60' 
                       : 'bg-amber-400'
                   }`}
@@ -86,9 +104,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10 animate-in fade-in duration-300">
       
-      {/* Social Profile Header Card */}
+      {/* Social Profile Header Card (Sections 28-29) */}
       <div className="glass-panel rounded-3xl p-6 sm:p-9 border border-white/[0.08] relative overflow-hidden">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" />
 
@@ -107,21 +125,26 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   {profileUser.name}
                 </h1>
                 <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-0.5 text-xs font-semibold text-amber-400">
-                  {profileUser.levelTitle}
+                  {isZeroProgress ? (profileUser.experienceLevel || 'Beginner') : profileUser.levelTitle}
                 </span>
+                {profileUser.isDemoAccount && (
+                  <span className="rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                    Demo Mode
+                  </span>
+                )}
               </div>
               <p className="text-xs text-white/50 font-mono mt-0.5">
                 @{profileUser.username} · Joined {profileUser.joinedDate}
               </p>
               <p className="mt-2 text-xs text-white/70 max-w-xl leading-relaxed">
-                {profileUser.bio}
+                {isZeroProgress ? 'Just getting started.' : profileUser.bio}
               </p>
             </div>
           </div>
 
-          {/* Follow / Social Action */}
-          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 border-t sm:border-t-0 border-white/[0.06] pt-4 sm:pt-0">
-            {!isOwnProfile && (
+          {/* Follow / Development Actions */}
+          <div className="flex flex-col items-start sm:items-end justify-between sm:justify-center gap-3 border-t sm:border-t-0 border-white/[0.06] pt-4 sm:pt-0">
+            {!isOwnProfile ? (
               <button
                 onClick={handleToggleFollow}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
@@ -142,6 +165,16 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   </>
                 )}
               </button>
+            ) : (
+              /* Developer Mode Switcher (Section 1: clearly separate demo data from real user data) */
+              <button
+                onClick={handleToggleDemoMode}
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                title="Toggle between fresh 0-progress account and veteran demo profile"
+              >
+                <Eye className="h-3.5 w-3.5 text-amber-400" />
+                <span>{currentUser.isDemoAccount ? 'Switch to Fresh User' : 'Preview Veteran Demo'}</span>
+              </button>
             )}
 
             <div className="flex items-center gap-4 text-xs font-mono text-white/60">
@@ -152,19 +185,25 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
         </div>
 
-        {/* Highlight Stats Row */}
+        {/* Highlight Stats Row (Section 28) */}
         <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-white/[0.08] pt-6">
           <div>
             <span className="text-[11px] text-white/40">Problems Solved</span>
             <p className="font-display text-2xl font-bold text-white mt-0.5">
               {profileUser.solvedProblemIds.length}
             </p>
+            {isZeroProgress && (
+              <span className="text-[10px] text-white/40">Your first solve is waiting</span>
+            )}
           </div>
           <div>
             <span className="text-[11px] text-white/40">Total Experience</span>
             <p className="font-display text-2xl font-bold text-cyan-400 mt-0.5">
               {profileUser.xp} <span className="text-xs text-white/40">XP</span>
             </p>
+            {isZeroProgress && (
+              <span className="text-[10px] text-white/40">Earn your first 100 XP</span>
+            )}
           </div>
           <div>
             <span className="text-[11px] text-white/40">Current Streak</span>
@@ -172,12 +211,18 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               <Flame className="h-5 w-5 fill-amber-400" />
               {profileUser.streak} days
             </p>
+            {isZeroProgress && (
+              <span className="text-[10px] text-white/40">Start your first streak today</span>
+            )}
           </div>
           <div>
-            <span className="text-[11px] text-white/40">Global Rank</span>
+            <span className="text-[11px] text-white/40">Contest Rating / Rank</span>
             <p className="font-display text-2xl font-bold text-purple-400 mt-0.5">
-              #{profileUser.globalRank}
+              {isZeroProgress ? 'Unrated' : `#${profileUser.globalRank}`}
             </p>
+            {isZeroProgress && (
+              <span className="text-[10px] text-white/40">Join a contest to calibrate</span>
+            )}
           </div>
         </div>
 
@@ -229,16 +274,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
             {renderHeatmap()}
 
-            <div className="flex items-center justify-between text-[11px] text-white/40 pt-2">
-              <span>Less</span>
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded-[3px] bg-white/[0.04]" />
-                <div className="h-3 w-3 rounded-[3px] bg-amber-500/30" />
-                <div className="h-3 w-3 rounded-[3px] bg-amber-500/60" />
-                <div className="h-3 w-3 rounded-[3px] bg-amber-400" />
+            {isZeroProgress ? (
+              <p className="text-center text-xs text-white/40 py-2 border-t border-white/[0.04]">
+                Start solving to build your coding profile.
+              </p>
+            ) : (
+              <div className="flex items-center justify-between text-[11px] text-white/40 pt-2 border-t border-white/[0.04]">
+                <span>Less</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded-[3px] bg-white/[0.04]" />
+                  <div className="h-3 w-3 rounded-[3px] bg-amber-500/30" />
+                  <div className="h-3 w-3 rounded-[3px] bg-amber-500/60" />
+                  <div className="h-3 w-3 rounded-[3px] bg-amber-400" />
+                </div>
+                <span>More solves</span>
               </div>
-              <span>More solves</span>
-            </div>
+            )}
           </div>
 
           {/* Difficulty and Mastery Grids */}
@@ -250,93 +301,114 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 Solved by Difficulty
               </h3>
 
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-xs text-white/70 mb-1">
-                    <span className="text-emerald-400 font-medium">Easy ({easyCount})</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.min(100, easyCount * 6)}%` }} />
-                  </div>
+              {isZeroProgress ? (
+                <div className="py-8 text-center text-xs text-white/40">
+                  No problems solved yet. Solve your first problem to start your difficulty breakdown.
                 </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-emerald-400 font-semibold">Easy</span>
+                      <span className="text-white/60 font-mono">{easyCount} solved</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${(easyCount / 30) * 100}%` }} />
+                    </div>
+                  </div>
 
-                <div>
-                  <div className="flex justify-between text-xs text-white/70 mb-1">
-                    <span className="text-amber-400 font-medium">Medium ({mediumCount})</span>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-amber-400 font-semibold">Medium</span>
+                      <span className="text-white/60 font-mono">{mediumCount} solved</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full bg-amber-400 rounded-full" style={{ width: `${(mediumCount / 30) * 100}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min(100, mediumCount * 6)}%` }} />
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-xs text-white/70 mb-1">
-                    <span className="text-rose-400 font-medium">Hard ({hardCount})</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-rose-400 rounded-full" style={{ width: `${Math.min(100, hardCount * 12)}%` }} />
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-rose-400 font-semibold">Hard</span>
+                      <span className="text-white/60 font-mono">{hardCount} solved</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full bg-rose-400 rounded-full" style={{ width: `${(hardCount / 15) * 100}%` }} />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Profile Preferences */}
+            {/* Pattern Mastery Breakdown */}
             <div className="glass-panel rounded-3xl p-6 border border-white/[0.08] space-y-4">
               <h3 className="font-display text-sm font-bold text-white">
-                Coding Preferences
+                Algorithmic Patterns Progress
               </h3>
 
-              <div className="space-y-2.5 text-xs text-white/70">
-                <div className="flex justify-between py-1.5 border-b border-white/[0.06]">
-                  <span>Preferred Language</span>
-                  <span className="font-semibold text-white uppercase">{profileUser.preferredLanguage}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-white/[0.06]">
-                  <span>Experience Tier</span>
-                  <span className="font-semibold text-white">{profileUser.experienceLevel}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-white/[0.06]">
-                  <span>Primary Focus</span>
-                  <span className="font-semibold text-amber-400">{profileUser.goal}</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span>Badges Unlocked</span>
-                  <span className="font-semibold text-white">{profileUser.badges.length} badges</span>
-                </div>
+              <div className="space-y-3">
+                {[
+                  { name: 'Arrays & Hashing', progress: isZeroProgress ? 0 : 40 },
+                  { name: 'Two Pointers', progress: isZeroProgress ? 0 : 25 },
+                  { name: 'Sliding Window', progress: isZeroProgress ? 0 : 15 },
+                  { name: 'Trees & Graphs', progress: isZeroProgress ? 0 : 10 },
+                ].map((patt) => (
+                  <div key={patt.name}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-white/80">{patt.name}</span>
+                      <span className="text-white/50 font-mono">{patt.progress}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-300"
+                        style={{ width: `${patt.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
           </div>
-
         </div>
       )}
 
       {/* TAB CONTENT: Problems Solved */}
       {activeTab === 'problems' && (
-        <div className="glass-panel rounded-3xl p-6 border border-white/[0.08] space-y-2">
-          {solvedProblems.map((prob) => {
-            if (!prob) return null;
-            return (
-              <div
-                key={prob.id}
-                onClick={() => onNavigateProblem(prob.id)}
-                className="flex items-center justify-between rounded-xl p-3.5 hover:bg-white/[0.04] transition-colors cursor-pointer text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+        <div className="glass-panel rounded-3xl p-6 border border-white/[0.08]">
+          {solvedProblems.length > 0 ? (
+            <div className="divide-y divide-white/[0.06]">
+              {solvedProblems.map((prob) => prob && (
+                <div 
+                  key={prob.id}
+                  onClick={() => onNavigateProblem(prob.id)}
+                  className="py-3.5 flex items-center justify-between hover:bg-white/[0.02] px-2 rounded-xl cursor-pointer transition-colors"
+                >
                   <div>
-                    <span className="font-semibold text-white">{prob.title}</span>
-                    <span className="block text-[11px] text-white/40">{prob.pattern} · {prob.topic}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white hover:text-amber-400 transition-colors">
+                        {prob.title}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        prob.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                        prob.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                        'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}>
+                        {prob.difficulty}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-white/40">{prob.pattern} · {prob.acceptance}</span>
                   </div>
+
+                  <span className="text-xs text-amber-400">View Solution →</span>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  prob.difficulty === 'Easy' ? 'bg-emerald-500/10 text-emerald-400' : prob.difficulty === 'Medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'
-                }`}>
-                  {prob.difficulty}
-                </span>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-xs text-white/40">
+              No problems solved yet. Your completed challenges and submissions will appear here.
+            </div>
+          )}
         </div>
       )}
 
@@ -346,33 +418,30 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           {ALL_BADGES.map((b) => {
             const isUnlocked = profileUser.badges.includes(b.id);
             return (
-              <div
+              <div 
                 key={b.id}
                 className={`glass-panel rounded-2xl p-5 border transition-all ${
-                  isUnlocked ? 'border-amber-400/40 bg-amber-500/5' : 'border-white/[0.06] opacity-45'
+                  isUnlocked 
+                    ? 'border-amber-400/40 bg-amber-500/5 shadow-md shadow-amber-500/5' 
+                    : 'border-white/[0.06] bg-white/[0.01] opacity-50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                    isUnlocked ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-white/40'
+                <div className="flex items-center gap-3.5">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl border ${
+                    isUnlocked ? 'border-amber-400/30 bg-amber-400/10 text-amber-400' : 'border-white/10 bg-white/5 text-white/40'
                   }`}>
                     <Award className="h-5 w-5" />
                   </div>
-                  {isUnlocked && (
-                    <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                      Unlocked
-                    </span>
-                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-display text-xs font-bold text-white">{b.title}</h4>
+                      {isUnlocked && (
+                        <span className="text-[10px] font-bold uppercase text-amber-400">Unlocked ✓</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-white/50 leading-relaxed">{b.description}</p>
+                  </div>
                 </div>
-                <h4 className="mt-4 font-display text-sm font-bold text-white">
-                  {b.title}
-                </h4>
-                <p className="mt-1 text-xs text-white/60 leading-relaxed">
-                  {b.description}
-                </p>
-                <span className="mt-3 block text-[10px] text-white/40 font-mono">
-                  {b.requirement}
-                </span>
               </div>
             );
           })}

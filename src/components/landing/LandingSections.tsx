@@ -59,7 +59,7 @@ export const LandingSections: React.FC<LandingSectionsProps> = ({
             Everything you need to become interview ready
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-white/60 leading-relaxed">
-            Eliminate tutorial hell. CodeLumen replaces passive video consumption with deliberate, feedback-driven practice.
+            Eliminate tutorial hell. CodeSpark replaces passive video consumption with deliberate, feedback-driven practice.
           </p>
         </div>
 

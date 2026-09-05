@@ -24,6 +24,8 @@ import { LeaderboardView } from './components/leaderboard/LeaderboardView';
 import { ContestsView } from './components/contests/ContestsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { AdminView } from './components/admin/AdminView';
+import { FirstLessonModal } from './components/lesson/FirstLessonModal';
+import { SkillAssessmentModal } from './components/assessment/SkillAssessmentModal';
 
 export function App() {
   const [currentView, setCurrentView] = useState<string>('landing');
@@ -39,6 +41,8 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isFirstLessonOpen, setIsFirstLessonOpen] = useState(false);
+  const [isAssessmentOpen, setIsAssessmentOpen] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -46,6 +50,11 @@ export function App() {
 
   // Global navigation handler
   const handleNavigate = (view: string, param?: string) => {
+    if ((view === 'dashboard' || view === 'settings') && !isLoggedIn) {
+      handleOpenAuth('login');
+      return;
+    }
+
     if (view === 'workspace') {
       if (param) setActiveProblemId(param);
       setCurrentView('workspace');
@@ -73,11 +82,14 @@ export function App() {
   const handleLogout = () => {
     StorageService.logout();
     setIsLoggedIn(false);
+    if (currentView === 'dashboard' || currentView === 'settings') {
+      setCurrentView('landing');
+    }
     setNotifications([
       {
         id: 'logout-' + Date.now(),
         title: 'Logged Out',
-        message: 'You have safely signed out. Your solved problems and progress remain saved.',
+        message: 'You have safely signed out of CodeSpark. Your solved problems and progress remain saved.',
         type: 'badge',
         read: false,
         timestamp: 'Just now'
@@ -111,7 +123,9 @@ export function App() {
     setCurrentUser(updated);
     setIsLoggedIn(true);
     setIsAuthOpen(false);
-    if (currentView === 'signin' || currentView === 'signup') {
+    if (!updated.onboarding_completed) {
+      setIsOnboardingOpen(true);
+    } else {
       setCurrentView('dashboard');
     }
   };
@@ -125,6 +139,27 @@ export function App() {
     setCurrentUser(complete);
     setIsOnboardingOpen(false);
     setCurrentView('dashboard');
+  };
+
+  const handleStartFirstLesson = () => {
+    setIsFirstLessonOpen(true);
+  };
+
+  const handleCompleteFirstLesson = (problemId: string) => {
+    setIsFirstLessonOpen(false);
+    const updated = StorageService.completeFirstLesson();
+    setCurrentUser(updated);
+    handleNavigate('workspace', problemId);
+  };
+
+  const handleApplyAssessmentRecommendation = (recommendedTopic: string, scores: Record<string, number>) => {
+    const updated = {
+      ...currentUser,
+      recommendedStartingTopic: recommendedTopic,
+      skillAssessmentScores: scores
+    };
+    StorageService.saveCurrentUser(updated);
+    setCurrentUser(updated);
   };
 
   const activeProblem = ALL_PROBLEMS.find(p => p.id === activeProblemId) || ALL_PROBLEMS[0];
@@ -167,6 +202,8 @@ export function App() {
           <UserDashboard
             currentUser={currentUser}
             onNavigate={handleNavigate}
+            onStartFirstLesson={handleStartFirstLesson}
+            onOpenAssessment={() => setIsAssessmentOpen(true)}
           />
         )}
 
@@ -297,6 +334,23 @@ export function App() {
         isOpen={isOnboardingOpen}
         currentUser={currentUser}
         onComplete={handleOnboardingComplete}
+        onOpenAssessment={() => setIsAssessmentOpen(true)}
+      />
+
+      {/* Interactive First Lesson Modal (Section 10) */}
+      <FirstLessonModal
+        isOpen={isFirstLessonOpen}
+        currentUser={currentUser}
+        onClose={() => setIsFirstLessonOpen(false)}
+        onStartProblem={handleCompleteFirstLesson}
+      />
+
+      {/* Diagnostic Skill Assessment Modal (Section 24) */}
+      <SkillAssessmentModal
+        isOpen={isAssessmentOpen}
+        currentUser={currentUser}
+        onClose={() => setIsAssessmentOpen(false)}
+        onApplyRecommendation={handleApplyAssessmentRecommendation}
       />
 
     </div>

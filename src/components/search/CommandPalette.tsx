@@ -261,7 +261,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             <span>Type to filter</span>
             <span>ESC to close</span>
           </div>
-          <span>CodeLumen Global Index</span>
+          <span>CodeSpark Global Index</span>
         </div>
       </div>
     </div>

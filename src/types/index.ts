@@ -15,7 +15,24 @@ export type UserGoal =
   | 'Learn DSA' 
   | 'Prepare for interviews' 
   | 'Competitive programming' 
-  | 'Improve problem solving';
+  | 'Improve problem solving'
+  | 'DSA Fundamentals'
+  | 'Become Faster at Coding';
+
+export type UserJourneyState = 
+  | 'new_account' 
+  | 'onboarding' 
+  | 'starting_journey' 
+  | 'first_lesson' 
+  | 'first_problem' 
+  | 'first_submission' 
+  | 'first_solve' 
+  | 'active_learner';
+
+export type LearningStyle = 
+  | 'concepts_first' 
+  | 'practice_immediately' 
+  | 'mixed';
 
 export interface UserProfile {
   id: string;
@@ -28,6 +45,8 @@ export interface UserProfile {
   preferredLanguage: SupportedLanguage;
   experienceLevel: ExperienceLevel;
   goal: UserGoal;
+  goals?: string[]; // Multiple goals selected during onboarding
+  learningStyle?: LearningStyle;
   xp: number;
   level: number;
   levelTitle: string;
@@ -43,6 +62,34 @@ export interface UserProfile {
   badges: string[]; // Badge IDs
   activityCalendar: Record<string, number>; // date 'YYYY-MM-DD' -> solves count
   joinedDate: string;
+  // Journey Progression Fields
+  journeyState?: UserJourneyState;
+  onboarding_completed?: boolean;
+  firstLessonCompleted?: boolean;
+  firstSolveCelebrated?: boolean;
+  recommendedStartingTopic?: string;
+  skillAssessmentScores?: Record<string, number>;
+  isDemoAccount?: boolean;
+  weeklyTarget?: number; // target problems per week (e.g. 3, 5, 7, 10)
+  preferences?: UserPreferences;
+  onboardingProgress?: OnboardingProgress;
+}
+
+export interface UserPreferences {
+  theme?: 'spark-dark' | 'obsidian' | 'monokai' | 'lumen-dark';
+  editorFontSize?: number;
+  keybindings?: 'standard' | 'vim' | 'emacs';
+  emailNotifications?: boolean;
+  soundEffects?: boolean;
+}
+
+export interface OnboardingProgress {
+  step: number;
+  experienceLevel?: ExperienceLevel;
+  goals?: string[];
+  preferredLanguage?: SupportedLanguage;
+  weeklyTarget?: number;
+  completed?: boolean;
 }
 
 export interface ProblemExample {

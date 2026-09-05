@@ -184,7 +184,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <label className="block text-xs font-medium text-white/70">Theme Flavor</label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: 'dark', title: 'Lumen Dark', desc: 'Deep obsidian (#09090c) with warm luminous glow' },
+                    { id: 'dark', title: 'Spark Dark', desc: 'Deep obsidian (#09090c) with warm electric glow' },
                     { id: 'dim', title: 'Charcoal Dim', desc: 'Slightly lifted ink background with cool borders' },
                     { id: 'system', title: 'System Adaptive', desc: 'Follows your operating system color scheme' },
                   ].map((thm) => (

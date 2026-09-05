@@ -117,6 +117,18 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
             <p className="mt-2 text-xs text-white/60 leading-relaxed">
               {selectedStage.description}
             </p>
+
+            {/* Section 19: Non-strict recommendation banner */}
+            {selectedStage.order > 1 && (
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300">
+                <div className="flex items-center gap-2">
+                  <span>🔒 Recommended after completing {ROADMAP_STAGES[selectedStage.order - 2]?.title || 'previous topics'}</span>
+                </div>
+                <span className="self-start sm:self-auto rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
+                  Explore Anyway
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Problems in this stage */}

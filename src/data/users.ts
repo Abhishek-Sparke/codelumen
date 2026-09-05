@@ -297,10 +297,10 @@ export const SAMPLE_USERS: UserProfile[] = [
   {
     id: 'user-10',
     name: 'Platform Admin',
-    username: 'codelumen_admin',
-    email: 'admin@codelumen.dev',
+    username: 'codespark_admin',
+    email: 'admin@codespark.dev',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-    bio: 'CodeLumen Core Curriculum Lead & Platform Administrator.',
+    bio: 'CodeSpark Core Curriculum Lead & Platform Administrator.',
     role: 'admin',
     preferredLanguage: 'python',
     experienceLevel: 'Advanced',

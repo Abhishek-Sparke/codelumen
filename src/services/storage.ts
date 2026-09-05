@@ -4,18 +4,20 @@ import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { calculateLevel } from '../data/badges';
 
 const STORAGE_KEYS = {
-  CURRENT_USER: 'codelumen_current_user',
-  ALL_USERS: 'codelumen_all_users',
-  SUBMISSIONS: 'codelumen_submissions',
-  DISCUSSIONS: 'codelumen_discussions',
-  NOTIFICATIONS: 'codelumen_notifications',
-  SETTINGS: 'codelumen_settings'
+  CURRENT_USER: 'codespark_current_user',
+  ALL_USERS: 'codespark_all_users',
+  SUBMISSIONS: 'codespark_submissions',
+  DISCUSSIONS: 'codespark_discussions',
+  NOTIFICATIONS: 'codespark_notifications',
+  SETTINGS: 'codespark_settings',
+  AUTH_ACCOUNTS: 'codespark_auth_accounts',
+  AUTH_STATE: 'codespark_authenticated'
 };
 
 export interface EditorSettings {
   fontSize: number;
   tabSize: number;
-  theme: 'lumen-dark' | 'obsidian' | 'monokai';
+  theme: 'spark-dark' | 'obsidian' | 'monokai' | 'lumen-dark';
   wordWrap: boolean;
   autoSave: boolean;
   appearance: 'dark' | 'dim' | 'system';
@@ -24,7 +26,7 @@ export interface EditorSettings {
 const DEFAULT_SETTINGS: EditorSettings = {
   fontSize: 14,
   tabSize: 2,
-  theme: 'lumen-dark',
+  theme: 'spark-dark',
   wordWrap: true,
   autoSave: true,
   appearance: 'dark'
@@ -97,7 +99,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: 'notif-3',
     title: 'Biweekly Contest Starting Soon',
-    message: 'CodeLumen Biweekly Sprint #48 begins tomorrow at 14:00 UTC. Set your reminder!',
+    message: 'CodeSpark Biweekly Sprint #48 begins tomorrow at 14:00 UTC. Set your reminder!',
     type: 'contest',
     read: true,
     timestamp: '1 day ago',
@@ -114,15 +116,60 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   }
 ];
 
+export const DEFAULT_FRESH_USER: UserProfile = {
+  id: 'user-current',
+  name: 'Abhishek Sparke',
+  username: 'abhishek_sparke',
+  email: 'abhishek.sparke@gmail.com',
+  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+  bio: 'Learning algorithms and mastering patterns on CodeSpark.',
+  role: 'user',
+  preferredLanguage: 'python',
+  experienceLevel: 'Beginner',
+  goal: 'DSA Fundamentals',
+  goals: ['DSA Fundamentals', 'Coding Interviews'],
+  learningStyle: 'concepts_first',
+  xp: 0,
+  level: 1,
+  levelTitle: 'Novice',
+  streak: 0,
+  longestStreak: 0,
+  globalRank: 0,
+  followersCount: 0,
+  followingCount: 0,
+  followingIds: [],
+  solvedProblemIds: [],
+  attemptedProblemIds: [],
+  savedProblemIds: [],
+  badges: [],
+  activityCalendar: {},
+  joinedDate: 'Joined today',
+  journeyState: 'starting_journey',
+  onboarding_completed: true,
+  firstLessonCompleted: false,
+  firstSolveCelebrated: false,
+  recommendedStartingTopic: 'Arrays & Hashing',
+  isDemoAccount: false,
+  weeklyTarget: 5
+};
+
+interface StoredAccount {
+  id: string;
+  email: string;
+  username: string;
+  password?: string;
+  user: UserProfile;
+}
+
 export const StorageService = {
   getCurrentUser(): UserProfile {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER) || localStorage.getItem('codelumen_current_user');
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
     }
-    return SAMPLE_USERS[0];
+    return { ...DEFAULT_FRESH_USER };
   },
 
   saveCurrentUser(user: UserProfile): void {
@@ -131,6 +178,13 @@ export const StorageService = {
       user.level = levelInfo.level;
       user.levelTitle = levelInfo.title;
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      // Also update in all users if present
+      const allUsers = this.getAllUsers();
+      const idx = allUsers.findIndex(u => u.id === user.id);
+      if (idx >= 0) {
+        allUsers[idx] = user;
+        this.saveAllUsers(allUsers);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -138,7 +192,7 @@ export const StorageService = {
 
   isAuthenticated(): boolean {
     try {
-      const auth = localStorage.getItem('codelumen_authenticated');
+      const auth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE) || localStorage.getItem('codelumen_authenticated');
       return auth !== null ? auth === 'true' : true;
     } catch {
       return true;
@@ -147,7 +201,7 @@ export const StorageService = {
 
   setAuthenticated(val: boolean): void {
     try {
-      localStorage.setItem('codelumen_authenticated', val ? 'true' : 'false');
+      localStorage.setItem(STORAGE_KEYS.AUTH_STATE, val ? 'true' : 'false');
     } catch (e) {
       console.error(e);
     }
@@ -155,15 +209,159 @@ export const StorageService = {
 
   logout(): void {
     try {
-      localStorage.setItem('codelumen_authenticated', 'false');
+      localStorage.setItem(STORAGE_KEYS.AUTH_STATE, 'false');
     } catch (e) {
       console.error(e);
     }
   },
 
+  getAuthAccounts(): StoredAccount[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.AUTH_ACCOUNTS);
+      if (data) return JSON.parse(data);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  },
+
+  saveAuthAccounts(accounts: StoredAccount[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.AUTH_ACCOUNTS, JSON.stringify(accounts));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  checkEmailAvailable(email: string): boolean {
+    const cleanEmail = email.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    if (accounts.some(a => a.email.toLowerCase() === cleanEmail)) return false;
+    const allUsers = this.getAllUsers();
+    return !allUsers.some(u => u.email.toLowerCase() === cleanEmail);
+  },
+
+  checkUsernameAvailable(username: string): boolean {
+    const cleanUsername = username.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    if (accounts.some(a => a.username.toLowerCase() === cleanUsername)) return false;
+    const allUsers = this.getAllUsers();
+    return !allUsers.some(u => u.username.toLowerCase() === cleanUsername);
+  },
+
+  registerUser(data: {
+    name: string;
+    username: string;
+    email: string;
+    password?: string;
+    avatar?: string;
+  }): { success: boolean; user?: UserProfile; error?: string } {
+    const email = data.email.trim().toLowerCase();
+    const username = data.username.trim().toLowerCase();
+
+    if (!email || !username) {
+      return { success: false, error: 'Email and username are required.' };
+    }
+
+    if (!this.checkEmailAvailable(email)) {
+      return { success: false, error: 'An account with this email already exists.' };
+    }
+
+    if (!this.checkUsernameAvailable(username)) {
+      return { success: false, error: 'This username is already taken.' };
+    }
+
+    const newUser: UserProfile = {
+      ...DEFAULT_FRESH_USER,
+      id: `user-${Date.now()}`,
+      name: data.name.trim() || data.username,
+      username,
+      email,
+      avatar: data.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+      bio: 'New explorer on CodeSpark.',
+      joinedDate: 'Joined today',
+      onboarding_completed: false,
+      journeyState: 'new_account',
+      xp: 0,
+      level: 1,
+      streak: 0,
+      longestStreak: 0,
+      solvedProblemIds: [],
+      attemptedProblemIds: [],
+      badges: []
+    };
+
+    // Save account
+    const accounts = this.getAuthAccounts();
+    accounts.push({
+      id: newUser.id,
+      email,
+      username,
+      password: data.password,
+      user: newUser
+    });
+    this.saveAuthAccounts(accounts);
+
+    // Save as current user and authenticate
+    this.saveCurrentUser(newUser);
+    this.setAuthenticated(true);
+
+    // Add to all users
+    const allUsers = this.getAllUsers();
+    allUsers.push(newUser);
+    this.saveAllUsers(allUsers);
+
+    return { success: true, user: newUser };
+  },
+
+  loginUser(identifier: string, password?: string): { success: boolean; user?: UserProfile; error?: string } {
+    const cleanId = identifier.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    
+    // Check saved accounts first
+    const matchedAccount = accounts.find(
+      a => a.email.toLowerCase() === cleanId || a.username.toLowerCase() === cleanId
+    );
+
+    if (matchedAccount) {
+      if (password && matchedAccount.password && matchedAccount.password !== password) {
+        return { success: false, error: 'Invalid password. Please try again.' };
+      }
+      this.saveCurrentUser(matchedAccount.user);
+      this.setAuthenticated(true);
+      return { success: true, user: matchedAccount.user };
+    }
+
+    // Check sample users (demo/fallback login)
+    const allUsers = this.getAllUsers();
+    const matchedUser = allUsers.find(
+      u => u.email.toLowerCase() === cleanId || u.username.toLowerCase() === cleanId
+    );
+
+    if (matchedUser) {
+      this.saveCurrentUser(matchedUser);
+      this.setAuthenticated(true);
+      return { success: true, user: matchedUser };
+    }
+
+    // If identifier looks like email, allow quick signin
+    if (cleanId.includes('@')) {
+      const parts = cleanId.split('@');
+      const genUsername = parts[0].replace(/[^a-zA-Z0-9_]/g, '') || `sparker_${Date.now()}`;
+      return this.registerUser({
+        name: parts[0],
+        username: genUsername,
+        email: cleanId,
+        password
+      });
+    }
+
+    return { success: false, error: 'Account not found. Please sign up.' };
+  },
+
   getAllUsers(): UserProfile[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
+      const data = localStorage.getItem(STORAGE_KEYS.ALL_USERS) || localStorage.getItem('codelumen_all_users');
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -215,18 +413,33 @@ export const StorageService = {
 
   recordProblemSolve(problemId: string, xpReward = 50): UserProfile {
     const user = this.getCurrentUser();
+    const isFirstSolve = user.solvedProblemIds.length === 0;
+
     if (!user.solvedProblemIds.includes(problemId)) {
       user.solvedProblemIds.push(problemId);
-      user.xp += xpReward;
+
+      // Section 15: Exact First Accepted Submission mechanics
+      if (isFirstSolve) {
+        user.xp = 100; // Guaranteed 100 XP for first solve
+        user.streak = 1;
+        user.longestStreak = 1;
+        if (!user.badges.includes('first-solve')) {
+          user.badges.push('first-solve');
+        }
+        user.journeyState = 'first_solve';
+        user.firstSolveCelebrated = false;
+      } else {
+        user.xp += xpReward;
+        user.streak = Math.max(1, user.streak);
+        user.longestStreak = Math.max(user.streak, user.longestStreak);
+        user.journeyState = 'active_learner';
+      }
       
       // Update today's activity calendar
       const today = new Date().toISOString().split('T')[0];
       user.activityCalendar[today] = (user.activityCalendar[today] || 0) + 1;
       
-      // Check badges
-      if (user.solvedProblemIds.length >= 1 && !user.badges.includes('first-solve')) {
-        user.badges.push('first-solve');
-      }
+      // Check additional milestone badges
       if (user.solvedProblemIds.length >= 10 && !user.badges.includes('solve-10')) {
         user.badges.push('solve-10');
       }
@@ -237,6 +450,55 @@ export const StorageService = {
       this.saveCurrentUser(user);
     }
     return user;
+  },
+
+  completeFirstLesson(): UserProfile {
+    const user = this.getCurrentUser();
+    user.firstLessonCompleted = true;
+    if (user.solvedProblemIds.length === 0) {
+      user.journeyState = 'first_problem';
+    }
+    this.saveCurrentUser(user);
+    return user;
+  },
+
+  dismissFirstSolveCelebration(): UserProfile {
+    const user = this.getCurrentUser();
+    user.firstSolveCelebrated = true;
+    user.journeyState = 'active_learner';
+    this.saveCurrentUser(user);
+    return user;
+  },
+
+  resetToFreshUser(): UserProfile {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    const fresh: UserProfile = {
+      ...DEFAULT_FRESH_USER,
+      id: 'user-' + Date.now(),
+      onboarding_completed: false,
+      journeyState: 'new_account',
+      solvedProblemIds: [],
+      attemptedProblemIds: [],
+      xp: 0,
+      streak: 0,
+      longestStreak: 0,
+      badges: []
+    };
+    this.saveCurrentUser(fresh);
+    return fresh;
+  },
+
+  loadDemoVeteranUser(): UserProfile {
+    const veteran: UserProfile = {
+      ...SAMPLE_USERS[0],
+      isDemoAccount: true,
+      onboarding_completed: true,
+      journeyState: 'active_learner',
+      firstLessonCompleted: true,
+      firstSolveCelebrated: true
+    };
+    this.saveCurrentUser(veteran);
+    return veteran;
   },
 
   toggleSaveProblem(problemId: string): boolean {
@@ -253,7 +515,7 @@ export const StorageService = {
 
   getSubmissions(): Submission[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS);
+      const data = localStorage.getItem(STORAGE_KEYS.SUBMISSIONS) || localStorage.getItem('codelumen_submissions');
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -273,7 +535,7 @@ export const StorageService = {
 
   getDiscussions(): DiscussionPost[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.DISCUSSIONS);
+      const data = localStorage.getItem(STORAGE_KEYS.DISCUSSIONS) || localStorage.getItem('codelumen_discussions');
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -345,7 +607,7 @@ export const StorageService = {
 
   getNotifications(): NotificationItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS) || localStorage.getItem('codelumen_notifications');
       if (data) return JSON.parse(data);
     } catch (e) {
       console.error(e);
@@ -365,7 +627,7 @@ export const StorageService = {
 
   getSettings(): EditorSettings {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS) || localStorage.getItem('codelumen_settings');
       if (data) return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
     } catch (e) {
       console.error(e);

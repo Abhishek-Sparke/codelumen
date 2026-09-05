@@ -1,5 +1,5 @@
 import React from 'react';
-import { Code2 } from 'lucide-react';
+import { CodeSparkLogo } from '../brand/CodeSparkLogo';
 
 interface FooterProps {
   onNavigate: (view: string) => void;
@@ -14,12 +14,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           {/* Brand Column */}
           <div className="col-span-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#14141b] border border-white/10">
-                <Code2 className="h-4 w-4 text-amber-400" />
-              </div>
-              <span className="font-display text-lg font-bold tracking-[0.18em] text-white">
-                CODELUMEN
-              </span>
+              <CodeSparkLogo size="sm" animate={false} />
             </div>
             <p className="mt-4 max-w-sm text-xs leading-relaxed text-white/50">
               The high-focus algorithmic operating system. Master data structures, recognize reusable problem patterns, and prepare for premier technical interviews with deliberate Socratic practice.
@@ -37,7 +32,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                 </svg>
               </a>
               <span className="text-[11px] text-white/40">
-                Lumen-inspired dark design language.
+                Deliberate practice with electric precision.
               </span>
             </div>
           </div>
@@ -123,7 +118,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom divider & copyright */}
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/[0.08] pt-8 text-[11px] text-white/40 sm:flex-row">
-          <p>© 2026 CodeLumen. All rights reserved. Deliberate practice for modern developers.</p>
+          <p>© 2026 CodeSpark. All rights reserved. Deliberate practice for modern developers.</p>
           <div className="flex items-center gap-6">
             <button onClick={() => onNavigate('admin')} className="hover:text-amber-400/80 transition-colors">
               Platform Admin

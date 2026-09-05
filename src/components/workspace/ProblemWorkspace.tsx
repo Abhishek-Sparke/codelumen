@@ -10,6 +10,7 @@ import { executeCode, ExecutionResult } from '../../services/codeRunner';
 import { StorageService } from '../../services/storage';
 import { AICoachPanel } from './AICoachPanel';
 import { EditorialTab } from './EditorialTab';
+import { FirstSolveModal } from './FirstSolveModal';
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -39,6 +40,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [isFirstSolveModalOpen, setIsFirstSolveModalOpen] = useState(false);
   const [expandedHints, setExpandedHints] = useState<number[]>([]);
 
   // Update starter code when language changes
@@ -89,16 +91,28 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
     StorageService.saveSubmission(sub);
 
     if (result.status === 'Accepted') {
+      const wasFirstSolve = currentUser.solvedProblemIds.length === 0;
       onSolveProblem(problem.id, problem.difficulty === 'Hard' ? 100 : problem.difficulty === 'Medium' ? 70 : 50);
-      setShowCelebration(true);
-      try {
-        confetti({
-          particleCount: 90,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-      } catch (e) {}
+      
+      if (wasFirstSolve) {
+        setIsFirstSolveModalOpen(true);
+      } else {
+        setShowCelebration(true);
+        try {
+          confetti({
+            particleCount: 90,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        } catch (e) {}
+      }
     }
+  };
+
+  const handleContinueFirstSolve = () => {
+    setIsFirstSolveModalOpen(false);
+    StorageService.dismissFirstSolveCelebration();
+    onNavigate('dashboard');
   };
 
   const isSaved = currentUser.savedProblemIds.includes(problem.id);
@@ -205,6 +219,7 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                 userCode={code}
                 failedTestDetails={executionResult?.details?.find(d => !d.passed)}
                 onInsertCode={(snippet) => setCode(snippet)}
+                experienceLevel={currentUser.experienceLevel}
               />
             )}
 
@@ -536,8 +551,15 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
 
       </div>
 
-      {/* Celebration Modal on Solve */}
-      {showCelebration && (
+      {/* Section 15 Dedicated First Solve Celebration Modal */}
+      <FirstSolveModal
+        isOpen={isFirstSolveModalOpen}
+        currentUser={currentUser}
+        onContinue={handleContinueFirstSolve}
+      />
+
+      {/* Standard Celebration Modal for Subsequent Solves */}
+      {showCelebration && !isFirstSolveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in zoom-in-95 duration-200">
           <div className="glass-panel max-w-sm rounded-3xl p-6 text-center border border-amber-500/30 bg-[#0c0c11] shadow-[0_25px_80px_-15px_rgba(245,158,11,0.3)]">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mb-4">

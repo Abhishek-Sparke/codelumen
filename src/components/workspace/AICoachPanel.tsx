@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Sparkles, HelpCircle, Terminal, Send, Lock, Unlock } from 'lucide-react';
-import { Problem, AICoachMessage } from '../../types';
+import { Problem, AICoachMessage, ExperienceLevel } from '../../types';
 import { AICoachService } from '../../services/aiCoachService';
 
 interface AICoachPanelProps {
@@ -8,16 +8,18 @@ interface AICoachPanelProps {
   userCode: string;
   failedTestDetails?: any;
   onInsertCode?: (code: string) => void;
+  experienceLevel?: ExperienceLevel;
 }
 
 export const AICoachPanel: React.FC<AICoachPanelProps> = ({
   problem,
   userCode,
   failedTestDetails,
-  onInsertCode
+  onInsertCode,
+  experienceLevel = 'Beginner'
 }) => {
   const [messages, setMessages] = useState<AICoachMessage[]>([
-    AICoachService.getInitialGreeting(problem)
+    AICoachService.getInitialGreeting(problem, experienceLevel)
   ]);
   const [hintLevel, setHintLevel] = useState<number>(0);
   const [inputText, setInputText] = useState('');
@@ -29,23 +31,23 @@ export const AICoachPanel: React.FC<AICoachPanelProps> = ({
   }, [messages]);
 
   const handleAskHint = () => {
-    const { message, nextLevel } = AICoachService.getNextHint(problem, hintLevel);
+    const { message, nextLevel } = AICoachService.getNextHint(problem, hintLevel, experienceLevel);
     setHintLevel(nextLevel);
     setMessages(prev => [...prev, message]);
   };
 
   const handleExplainPattern = () => {
-    const msg = AICoachService.explainPattern(problem);
+    const msg = AICoachService.explainPattern(problem, experienceLevel);
     setMessages(prev => [...prev, msg]);
   };
 
   const handleExplainFailure = () => {
-    const msg = AICoachService.explainFailure(problem, userCode, failedTestDetails);
+    const msg = AICoachService.explainFailure(problem, userCode, failedTestDetails, experienceLevel);
     setMessages(prev => [...prev, msg]);
   };
 
   const handleReviewComplexity = () => {
-    const msg = AICoachService.reviewComplexity(problem, userCode);
+    const msg = AICoachService.reviewComplexity(problem, userCode, experienceLevel);
     setMessages(prev => [...prev, msg]);
   };
 
@@ -66,7 +68,7 @@ export const AICoachPanel: React.FC<AICoachPanelProps> = ({
       timestamp: 'Just now'
     };
 
-    const coachReply = AICoachService.answerFreeform(problem, inputText);
+    const coachReply = AICoachService.answerFreeform(problem, inputText, experienceLevel);
 
     setMessages(prev => [...prev, userMsg, coachReply]);
     setInputText('');
@@ -82,7 +84,12 @@ export const AICoachPanel: React.FC<AICoachPanelProps> = ({
             <Bot className="h-4 w-4" />
           </div>
           <div>
-            <span className="font-display text-xs font-bold text-white">Socratic AI Coach</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-display text-xs font-bold text-white">Socratic AI Coach</span>
+              <span className="rounded bg-amber-400/15 text-[9px] font-bold text-amber-300 px-1.5 py-0.2">
+                {experienceLevel}
+              </span>
+            </div>
             <span className="block text-[10px] text-white/40">Guiding deliberate discovery</span>
           </div>
         </div>

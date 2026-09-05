@@ -36,7 +36,7 @@
   }
 }
 
-/* Custom Utilities for Lumen-inspired styling */
+/* Custom Utilities for CodeSpark styling */
 .glass-panel {
   background: rgba(16, 16, 21, 0.72);
   backdrop-filter: blur(16px);
@@ -54,32 +54,55 @@
   box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5), 0 0 20px -5px rgba(245, 158, 11, 0.05);
 }
 
-.lumen-border {
+.lumen-border, .spark-border {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.lumen-border-subtle {
+.lumen-border-subtle, .spark-border-subtle {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.lumen-glow-amber {
+.lumen-glow-amber, .spark-glow-amber {
   box-shadow: 0 0 50px -12px rgba(245, 158, 11, 0.18);
 }
 
-.lumen-glow-cyan {
+.lumen-glow-cyan, .spark-glow-cyan {
   box-shadow: 0 0 50px -12px rgba(6, 182, 212, 0.18);
 }
 
-.lumen-glow-card {
+.lumen-glow-card, .spark-glow-card {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 20px 50px -10px rgba(0, 0, 0, 0.7);
 }
 
-.lumen-tag {
+.lumen-tag, .spark-tag {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-size: 0.72rem;
   font-weight: 600;
   opacity: 0.65;
+}
+
+/* CodeSpark Lightning Pulse Animation */
+@keyframes sparkPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.45));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.85));
+    transform: scale(1.04);
+  }
+}
+
+.spark-bolt-glow {
+  animation: sparkPulse 2.8s ease-in-out infinite;
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-bolt-glow {
+    animation: none;
+  }
 }
 
 /* Custom sleek scrollbar */

@@ -1,7 +1,7 @@
 import { Badge } from '../types';
 
 export const ALL_BADGES: Badge[] = [
-  { id: 'first-solve', title: 'First Solve', description: 'Solved your first algorithmic challenge on CodeLumen.', iconName: 'Award', category: 'solve', requirement: '1 problem solved' },
+  { id: 'first-solve', title: 'First Solve', description: 'Solved your first algorithmic challenge on CodeSpark.', iconName: 'Award', category: 'solve', requirement: '1 problem solved' },
   { id: 'solve-10', title: '10 Problems', description: 'Solved 10 DSA problems across any topic.', iconName: 'Target', category: 'solve', requirement: '10 problems solved' },
   { id: 'solve-50', title: '50 Problems', description: 'Demonstrated consistent algorithmic mastery with 50 problems.', iconName: 'Zap', category: 'solve', requirement: '50 problems solved' },
   { id: 'solve-100', title: '100 Problems', description: 'Centurion of code. 100 solutions submitted and verified.', iconName: 'ShieldAlert', category: 'solve', requirement: '100 problems solved' },

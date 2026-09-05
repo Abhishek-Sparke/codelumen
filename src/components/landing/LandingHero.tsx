@@ -69,7 +69,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 text-center">
         
-        {/* Lumen badge */}
+        {/* CodeSpark badge */}
         <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3.5 py-1.5 text-xs text-amber-300 backdrop-blur-md shadow-sm">
           <Sparkles className="h-3.5 w-3.5 text-amber-400" />
           <span className="font-semibold uppercase tracking-[0.2em] text-[11px]">

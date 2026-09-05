@@ -1,5 +1,5 @@
 -- =============================================================================
--- CODELUMEN — SCALABLE PRODUCTION DATABASE SCHEMA (POSTGRESQL / SUPABASE)
+-- CODESPARK — SCALABLE PRODUCTION DATABASE SCHEMA (POSTGRESQL / SUPABASE)
 -- =============================================================================
 
 -- Enable UUID extension

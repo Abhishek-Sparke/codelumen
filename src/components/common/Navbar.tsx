@@ -4,6 +4,7 @@ import {
   Settings, LogOut, Shield, ChevronDown, Sparkles
 } from 'lucide-react';
 import { UserProfile, NotificationItem } from '../../types';
+import { CodeSparkLogo } from '../brand/CodeSparkLogo';
 
 interface NavbarProps {
   currentView: string;
@@ -51,21 +52,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button 
             onClick={() => onNavigate('landing')}
             className="group flex items-center gap-2.5 text-left focus:outline-none"
-            aria-label="CodeLumen Home"
+            aria-label="CodeSpark Home"
           >
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 via-white/5 to-cyan-500/20 p-[1px] shadow-sm transition-transform duration-300 group-hover:scale-105">
-              <div className="flex h-full w-full items-center justify-center rounded-[11px] bg-[#0f0f14]">
-                <Code2 className="h-4.5 w-4.5 text-amber-400 transition-colors group-hover:text-amber-300" />
-              </div>
+            <div className="relative flex items-center">
+              <CodeSparkLogo size="sm" animate={true} />
             </div>
-            <div>
-              <span className="block font-display text-lg font-bold tracking-[0.16em] text-white">
-                CODELUMEN
-              </span>
-              <span className="block text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40">
-                DSA Mastery
-              </span>
-            </div>
+            <span className="hidden sm:inline-block text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40 border-l border-white/10 pl-2">
+              DSA Mastery
+            </span>
           </button>
 
           {/* Desktop Navigation Links */}
