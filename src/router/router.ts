@@ -25,6 +25,8 @@ export interface RouteInfo {
   slug?: string;
   subType?: 'rules' | 'category' | 'thread';
   categorySlug?: string;
+  adminSection?: 'dashboard' | 'users' | 'problems' | 'roadmaps' | 'study-plans' | 'discussions' | 'rules' | 'moderation' | 'reports' | 'contests' | 'achievements' | 'spark' | 'settings' | 'audit-logs' | 'analytics';
+  adminEntityId?: string;
   queryParams: Record<string, string>;
   isNotFound?: boolean;
 }
@@ -147,8 +149,39 @@ export function parseRoute(rawPathname: string): RouteInfo {
   if (pathname === '/settings') {
     return { pathname, section: 'settings', queryParams };
   }
+  // Admin routing: /admin, /admin/:subSection, /admin/:subSection/:id
   if (pathname === '/admin') {
-    return { pathname, section: 'admin', queryParams };
+    return { pathname, section: 'admin', adminSection: 'dashboard', queryParams };
+  }
+  if (pathname.startsWith('/admin/')) {
+    const adminPath = pathname.substring('/admin/'.length);
+    const [subSection, entityId] = adminPath.split('/');
+
+    let adminSec: any = 'dashboard';
+    if (subSection === 'users') adminSec = 'users';
+    else if (subSection === 'problems') adminSec = 'problems';
+    else if (subSection === 'roadmaps') adminSec = 'roadmaps';
+    else if (subSection === 'study-plans') adminSec = 'study-plans';
+    else if (subSection === 'discussions') {
+      adminSec = entityId === 'rules' ? 'rules' : 'discussions';
+    }
+    else if (subSection === 'rules') adminSec = 'rules';
+    else if (subSection === 'moderation') adminSec = 'moderation';
+    else if (subSection === 'reports') adminSec = 'reports';
+    else if (subSection === 'contests') adminSec = 'contests';
+    else if (subSection === 'achievements') adminSec = 'achievements';
+    else if (subSection === 'spark') adminSec = 'spark';
+    else if (subSection === 'settings') adminSec = 'settings';
+    else if (subSection === 'audit-logs' || subSection === 'audit') adminSec = 'audit-logs';
+    else if (subSection === 'analytics') adminSec = 'analytics';
+
+    return {
+      pathname,
+      section: 'admin',
+      adminSection: adminSec,
+      adminEntityId: entityId,
+      queryParams
+    };
   }
 
   // Unrecognized path -> Not Found
@@ -198,7 +231,7 @@ export function getCanonicalPath(viewOrPath: string, param?: string): string {
     case 'settings':
       return '/settings';
     case 'admin':
-      return '/admin';
+      return param ? `/admin/${param}` : '/admin';
     case 'signin':
       return '/signin';
     case 'signup':

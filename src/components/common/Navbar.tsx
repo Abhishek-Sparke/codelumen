@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Flame, Bell, Search, User, Bookmark, 
-  Settings, LogOut, ChevronDown, Sparkles
+  Settings, LogOut, ChevronDown, Sparkles, Shield
 } from 'lucide-react';
 import { UserProfile, NotificationItem } from '../../types';
 import { CodeSparkLogo } from '../brand/CodeSparkLogo';
@@ -288,6 +288,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <Settings className="h-3.5 w-3.5 text-white/50" />
                           Settings
                         </Link>
+
+                        {(currentUser.role === 'admin' || currentUser.role === 'moderator') && (
+                          <Link
+                            href="/admin"
+                            onClick={() => setShowProfileMenu(false)}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-400/10 transition-colors"
+                          >
+                            <Shield className="h-3.5 w-3.5 text-amber-400" />
+                            {currentUser.role === 'admin' ? 'Control Center (Admin)' : 'Staff Moderation'}
+                          </Link>
+                        )}
                         
                         <div className="my-1 border-t border-white/[0.08]" />
 

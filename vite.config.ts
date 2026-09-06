@@ -15,6 +15,24 @@ import {
   handleToggleBookmark
 } from './server/forumController'
 import { handleSparkAction } from './server/sparkController'
+import {
+  handleGetMetrics,
+  handleGetUsers,
+  handleUpdateUserRole,
+  handleUpdateUserStatus,
+  handleGetReports,
+  handleResolveReport,
+  handleGetDiscussionRules,
+  handleSaveDiscussionRulesDraft,
+  handlePublishDiscussionRules,
+  handleRollbackDiscussionRules,
+  handleGetProblems,
+  handlePublishProblem,
+  handleArchiveProblem,
+  handleGetPlatformSettings,
+  handleUpdatePlatformSettings,
+  handleGetAuditLogs
+} from './server/adminController'
 
 function codesparkApiPlugin(): Plugin {
   return {
@@ -23,6 +41,144 @@ function codesparkApiPlugin(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const parsedUrl = new URL(req.url || '/', 'http://localhost:5173');
         const pathname = parsedUrl.pathname;
+
+        // Admin & Moderation APIs: /api/admin/*
+        if (pathname.startsWith('/api/admin')) {
+          res.setHeader('Content-Type', 'application/json');
+          const actorRole = (req.headers['x-user-role'] as string) || parsedUrl.searchParams.get('role') || 'user';
+          const actorId = (req.headers['x-user-id'] as string) || parsedUrl.searchParams.get('userId') || '';
+          const actorUsername = (req.headers['x-user-username'] as string) || parsedUrl.searchParams.get('username') || '';
+
+          if (req.method === 'GET') {
+            if (pathname === '/api/admin/metrics') {
+              const resObj = await handleGetMetrics(actorRole, actorId);
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/users') {
+              const search = parsedUrl.searchParams.get('search') || undefined;
+              const role = parsedUrl.searchParams.get('roleFilter') || undefined;
+              const status = parsedUrl.searchParams.get('statusFilter') || undefined;
+              const resObj = await handleGetUsers(actorRole, actorId, { search, role, status });
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/reports') {
+              const status = parsedUrl.searchParams.get('status') || undefined;
+              const priority = parsedUrl.searchParams.get('priority') || undefined;
+              const resObj = await handleGetReports(actorRole, actorId, { status, priority });
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/rules') {
+              const resObj = await handleGetDiscussionRules(actorRole, actorId);
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/problems') {
+              const search = parsedUrl.searchParams.get('search') || undefined;
+              const lifecycle = parsedUrl.searchParams.get('lifecycle') || undefined;
+              const resObj = await handleGetProblems(actorRole, actorId, { search, lifecycle });
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/settings') {
+              const resObj = await handleGetPlatformSettings(actorRole, actorId);
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+            if (pathname === '/api/admin/audit-logs') {
+              const targetType = parsedUrl.searchParams.get('targetType') || undefined;
+              const search = parsedUrl.searchParams.get('search') || undefined;
+              const limit = parsedUrl.searchParams.get('limit') ? parseInt(parsedUrl.searchParams.get('limit')!, 10) : undefined;
+              const resObj = await handleGetAuditLogs(actorRole, actorId, { targetType, search, limit });
+              res.statusCode = resObj.status;
+              res.end(JSON.stringify(resObj.data));
+              return;
+            }
+          }
+
+          if (req.method === 'POST') {
+            let bodyStr = '';
+            req.on('data', chunk => { bodyStr += chunk; });
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr || '{}');
+                const role = body.actorRole || actorRole;
+                const id = body.actorId || actorId;
+                const username = body.actorUsername || actorUsername;
+
+                if (pathname === '/api/admin/users/role') {
+                  const resObj = await handleUpdateUserRole(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/users/status') {
+                  const resObj = await handleUpdateUserStatus(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/reports/resolve') {
+                  const resObj = await handleResolveReport(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/rules/draft') {
+                  const resObj = await handleSaveDiscussionRulesDraft(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/rules/publish') {
+                  const resObj = await handlePublishDiscussionRules(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/rules/rollback') {
+                  const resObj = await handleRollbackDiscussionRules(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/problems/publish') {
+                  const resObj = await handlePublishProblem(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/problems/archive') {
+                  const resObj = await handleArchiveProblem(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+                if (pathname === '/api/admin/settings') {
+                  const resObj = await handleUpdatePlatformSettings(role, id, username, body);
+                  res.statusCode = resObj.status;
+                  res.end(JSON.stringify(resObj.data));
+                  return;
+                }
+
+                res.statusCode = 404;
+                res.end(JSON.stringify({ success: false, error: 'Admin action endpoint not found' }));
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: err?.message || 'Server error' }));
+              }
+            });
+            return;
+          }
+        }
 
         // Spark AI APIs
         if (pathname.startsWith('/api/spark')) {

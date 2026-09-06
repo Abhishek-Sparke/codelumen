@@ -140,7 +140,10 @@ export function App() {
     } else if (currentRoute.section === 'settings') {
       document.title = `Settings | CodeSpark`;
     } else if (currentRoute.section === 'admin') {
-      document.title = `Admin Panel | CodeSpark`;
+      const sectionName = currentRoute.adminSection
+        ? currentRoute.adminSection.charAt(0).toUpperCase() + currentRoute.adminSection.slice(1).replace('-', ' ')
+        : 'Control Center';
+      document.title = `${sectionName} | CodeSpark Admin`;
     } else if (currentRoute.isNotFound || currentView === 'problem-not-found' || currentView === 'profile-not-found') {
       document.title = `Not Found | CodeSpark`;
     } else {
@@ -431,9 +434,15 @@ export function App() {
           />
         )}
 
-        {currentView === 'admin' && currentUser && (
+        {currentView === 'admin' && (
           <AdminView
+            currentUser={currentUser}
+            activeSection={currentRoute.adminSection || 'dashboard'}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
+            onNavigateSection={(sec) => {
+              navigate(sec === 'dashboard' ? '/admin' : (sec === 'rules' ? '/admin/discussions/rules' : `/admin/${sec}`));
+            }}
+            onOpenAuth={() => handleOpenAuth('login', currentRoute.pathname)}
           />
         )}
 

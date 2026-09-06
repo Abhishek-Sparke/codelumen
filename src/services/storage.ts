@@ -4,7 +4,8 @@ import {
   UserProblemProgressRecord, SavedProblemRecord, SubmissionRecord, SubmissionDraftRecord,
   XpTransactionRecord, UserActivityRecord, SupportedLanguage,
   ExecutionJobRecord, PersonalProblemList, UserStudyPlanProgress,
-  DailyChallenge, ContestRatingHistoryItem, AchievementItem, InterviewSessionConfig
+  DailyChallenge, ContestRatingHistoryItem, AchievementItem, InterviewSessionConfig,
+  AuditLogEntry, PlatformReport, DiscussionRulesRevision, PlatformSettings, AdminRole, UserAccountStatus, ProblemLifecycleState
 } from '../types';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { SAMPLE_USERS } from '../data/users';
@@ -33,7 +34,13 @@ const STORAGE_KEYS = {
   USER_ACHIEVEMENTS: 'codespark_user_achievements',
   CONTEST_REGISTRATIONS: 'codespark_contest_registrations',
   CONTEST_RATINGS: 'codespark_contest_ratings',
-  INTERVIEW_SESSIONS: 'codespark_interview_sessions'
+  INTERVIEW_SESSIONS: 'codespark_interview_sessions',
+  // Phase 7 Keys
+  ADMIN_AUDIT_LOGS: 'codespark_admin_audit_logs',
+  PLATFORM_REPORTS: 'codespark_platform_reports',
+  DISCUSSION_RULES_REVISIONS: 'codespark_discussion_rules_revisions',
+  PLATFORM_SETTINGS: 'codespark_platform_settings',
+  PROBLEM_LIFECYCLES: 'codespark_problem_lifecycles'
 };
 
 
@@ -519,6 +526,37 @@ export const StorageService = {
       if (!registeredUsers.some(u => u.id === sample.id || u.username.toLowerCase() === sample.username.toLowerCase())) {
         registeredUsers.push(sample);
       }
+    }
+    // Ensure default CodeSpark Administrator account exists
+    if (!registeredUsers.some(u => u.role === 'admin')) {
+      const defaultAdmin: UserProfile = {
+        id: 'user-admin',
+        name: 'CodeSpark Administrator',
+        username: 'codespark_admin',
+        email: 'admin@codespark.dev',
+        avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
+        bio: 'Platform Operations & System Administrator for CodeSpark.',
+        role: 'admin',
+        preferredLanguage: 'python',
+        experienceLevel: 'Advanced',
+        goal: 'Competitive programming',
+        xp: 99999,
+        level: 100,
+        levelTitle: 'Legend',
+        streak: 365,
+        longestStreak: 365,
+        globalRank: 1,
+        followersCount: 5000,
+        followingCount: 10,
+        followingIds: [],
+        solvedProblemIds: ['p-1', 'p-2', 'p-3', 'p-4', 'p-5'],
+        attemptedProblemIds: [],
+        savedProblemIds: [],
+        badges: ['admin', 'streak-30', 'tree-master'],
+        activityCalendar: { '2026-09-06': 10 },
+        joinedDate: 'January 2025'
+      };
+      registeredUsers.push(defaultAdmin);
     }
     return registeredUsers;
   },
@@ -1429,6 +1467,361 @@ export const StorageService = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  // ===========================================================================
+  // PHASE 7: ADMIN, MODERATION & PLATFORM CONTROL CENTER
+  // ===========================================================================
+  getAuditLogs(): AuditLogEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.ADMIN_AUDIT_LOGS);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      {
+        id: 'log-init-1',
+        timestamp: new Date().toISOString(),
+        actorId: 'user-admin',
+        actorUsername: 'codespark_admin',
+        actorRole: 'admin',
+        action: 'SYSTEM_INITIALIZED',
+        targetType: 'settings',
+        details: 'CodeSpark Platform Control Center initialized with Zero-Trust RBAC.'
+      }
+    ];
+  },
+
+  appendAuditLog(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): AuditLogEntry {
+    const logs = this.getAuditLogs();
+    const newEntry: AuditLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      ...entry
+    };
+    logs.unshift(newEntry);
+    try {
+      localStorage.setItem(STORAGE_KEYS.ADMIN_AUDIT_LOGS, JSON.stringify(logs.slice(0, 500)));
+    } catch (e) {
+      console.error(e);
+    }
+    return newEntry;
+  },
+
+  getReports(): PlatformReport[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PLATFORM_REPORTS);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      {
+        id: 'rep-1',
+        reportedBy: 'user-current',
+        reportedByUsername: 'ada_codes',
+        targetType: 'discussion',
+        targetId: 'disc-2',
+        targetTitle: 'Dynamic Programming memoization trade-offs',
+        targetSnippet: 'Check out my external paywalled blog at spam-link.xyz for the answer...',
+        reason: 'spam',
+        details: 'User posted an unsolicited external affiliate link instead of participating in discussion.',
+        status: 'pending',
+        priority: 'medium',
+        createdAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        id: 'rep-2',
+        reportedBy: 'user-1',
+        reportedByUsername: 'elena_algo',
+        targetType: 'comment',
+        targetId: 'com-402',
+        targetTitle: 'Re: Two Sum optimal one-pass',
+        targetSnippet: 'This question is too easy only a toddler would fail to see O(n)',
+        reason: 'harassment',
+        details: 'Condescending behavior discouraging newer developers in the community.',
+        status: 'pending',
+        priority: 'high',
+        createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+      }
+    ];
+  },
+
+  saveReports(reports: PlatformReport[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PLATFORM_REPORTS, JSON.stringify(reports));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  resolveReport(reportId: string, actionTaken: any, modNotes?: string, resolvedBy?: string): boolean {
+    const reports = this.getReports();
+    const idx = reports.findIndex(r => r.id === reportId);
+    if (idx === -1) return false;
+    reports[idx].status = 'resolved';
+    reports[idx].actionTaken = actionTaken;
+    reports[idx].modNotes = modNotes;
+    reports[idx].resolvedBy = resolvedBy || 'moderator';
+    reports[idx].resolvedAt = new Date().toISOString();
+    this.saveReports(reports);
+    this.appendAuditLog({
+      actorId: resolvedBy || 'moderator',
+      actorUsername: resolvedBy || 'moderator',
+      actorRole: 'moderator',
+      action: 'REPORT_RESOLVED',
+      targetType: 'report',
+      targetId: reportId,
+      details: `Resolved report ${reportId} with action '${actionTaken}'. Notes: ${modNotes || 'None'}`
+    });
+    return true;
+  },
+
+  getDiscussionRulesRevisions(): DiscussionRulesRevision[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DISCUSSION_RULES_REVISIONS);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      {
+        id: 'rev-1',
+        version: 1,
+        title: 'CodeSpark Discussion Rules (Official)',
+        contentMarkdown: `# CodeSpark Community & Discussion Rules\n\nWelcome to CodeSpark Discussions. This community is built for thoughtful algorithmic learning, problem-solving discourse, and respectful peer collaboration.\n\n### 1. Be Respectful and Constructive\nTreat all developers with kindness. Personal attacks, harassment, bigotry, elitism, or trolling are strictly forbidden.\n\n### 2. No Direct Answer Leaks or Cheating\nDo not post raw, unformatted solutions without explanation. Provide intuition, recurrence relations, complexity trade-offs, and algorithmic hints first.\n\n### 3. Clear Code Formatting & Spoilers\nAlways wrap code snippets in Markdown backticks with the language identifier (e.g. \\\`\\\`\\\`python).\n\n### 4. Zero Tolerance for Spam or Plagiarism\nDo not create repetitive posts, unsolicited affiliate links, or plagiarism.\n\n### 5. Follow Moderator Guidance\nModerators ensure fair play and healthy discussions.`,
+        status: 'published',
+        authorId: 'user-admin',
+        authorUsername: 'codespark_admin',
+        createdAt: '2026-01-15T00:00:00.000Z',
+        publishedAt: '2026-01-15T00:00:00.000Z',
+        changeSummary: 'Initial established platform discussion rules.'
+      }
+    ];
+  },
+
+  saveDiscussionRulesRevisions(revisions: DiscussionRulesRevision[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.DISCUSSION_RULES_REVISIONS, JSON.stringify(revisions));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  publishRulesRevision(revisionId: string, authorUsername?: string): DiscussionRulesRevision | null {
+    const revs = this.getDiscussionRulesRevisions();
+    const target = revs.find(r => r.id === revisionId);
+    if (!target) return null;
+
+    const updated = revs.map(r => ({
+      ...r,
+      status: r.id === revisionId ? ('published' as const) : (r.status === 'published' ? ('archived' as const) : r.status),
+      publishedAt: r.id === revisionId ? new Date().toISOString() : r.publishedAt
+    }));
+
+    this.saveDiscussionRulesRevisions(updated);
+
+    // Also sync with forum thread
+    try {
+      const threads = this.getDiscussions();
+      const rulesIdx = threads.findIndex(t => t.system_type === 'discussion_rules' || t.id === 'discussion-rules');
+      if (rulesIdx >= 0) {
+        threads[rulesIdx].content = target.contentMarkdown;
+        threads[rulesIdx].lastActivityAt = new Date().toISOString();
+        this.saveDiscussions(threads);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    this.appendAuditLog({
+      actorId: authorUsername || 'admin',
+      actorUsername: authorUsername || 'admin',
+      actorRole: 'admin',
+      action: 'RULES_PUBLISHED',
+      targetType: 'rule',
+      targetId: target.id,
+      details: `Published Discussion Rules v${target.version}: "${target.title}".`
+    });
+
+    return target;
+  },
+
+  rollbackRulesRevision(targetVersion: number, authorUsername?: string): DiscussionRulesRevision | null {
+    const revs = this.getDiscussionRulesRevisions();
+    const source = revs.find(r => r.version === targetVersion);
+    if (!source) return null;
+
+    const nextVer = Math.max(...revs.map(r => r.version), 0) + 1;
+    const newRev: DiscussionRulesRevision = {
+      id: `rev-${Date.now()}`,
+      version: nextVer,
+      title: source.title,
+      contentMarkdown: source.contentMarkdown,
+      status: 'published',
+      authorId: authorUsername || 'admin',
+      authorUsername: authorUsername || 'admin',
+      createdAt: new Date().toISOString(),
+      publishedAt: new Date().toISOString(),
+      changeSummary: `Rollback to Version ${source.version} content.`
+    };
+
+    const archived: DiscussionRulesRevision[] = revs.map(r => ({
+      ...r,
+      status: (r.status === 'published' ? 'archived' : r.status) as 'draft' | 'published' | 'archived'
+    }));
+    archived.unshift(newRev);
+
+    this.saveDiscussionRulesRevisions(archived);
+
+    try {
+      const threads = this.getDiscussions();
+      const rulesIdx = threads.findIndex(t => t.system_type === 'discussion_rules' || t.id === 'discussion-rules');
+      if (rulesIdx >= 0) {
+        threads[rulesIdx].content = newRev.contentMarkdown;
+        threads[rulesIdx].lastActivityAt = new Date().toISOString();
+        this.saveDiscussions(threads);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    this.appendAuditLog({
+      actorId: authorUsername || 'admin',
+      actorUsername: authorUsername || 'admin',
+      actorRole: 'admin',
+      action: 'RULES_ROLLBACK',
+      targetType: 'rule',
+      targetId: newRev.id,
+      details: `Rolled back Discussion Rules to v${source.version} as new v${nextVer}.`
+    });
+
+    return newRev;
+  },
+
+  getPlatformSettings(): PlatformSettings {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PLATFORM_SETTINGS);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      siteName: 'CodeSpark',
+      maintenanceMode: false,
+      maintenanceNotice: 'CodeSpark is undergoing scheduled core maintenance.',
+      registrationsOpen: true,
+      guestSubmissionsAllowed: true,
+      sparkAiEnabled: true,
+      sparkAiRateLimitPerMin: 20,
+      contestsEnabled: true,
+      discussionsEnabled: true,
+      publicLeaderboardEnabled: true,
+      featureFlags: {
+        'spark_ai': true,
+        'spark_hints': true,
+        'spark_debugging': true,
+        'spark_complexity_audit': true,
+        'interview_simulations': true,
+        'discussion_rules_v2': true,
+        'live_contest_registration': true
+      }
+    };
+  },
+
+  savePlatformSettings(settings: PlatformSettings): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PLATFORM_SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  getProblemLifecycles(): Record<string, ProblemLifecycleState> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PROBLEM_LIFECYCLES);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  },
+
+  setProblemLifecycle(problemId: string, state: ProblemLifecycleState): void {
+    const cur = this.getProblemLifecycles();
+    cur[problemId] = state;
+    try {
+      localStorage.setItem(STORAGE_KEYS.PROBLEM_LIFECYCLES, JSON.stringify(cur));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  updateUserRole(userId: string, newRole: AdminRole, actorId?: string): { success: boolean; error?: string } {
+    const users = this.getAllUsers();
+    const target = users.find(u => u.id === userId);
+    if (!target) return { success: false, error: 'User not found' };
+
+    // LAST ADMIN LOCKOUT GUARD
+    const adminCount = users.filter(u => u.role === 'admin').length;
+    if (target.role === 'admin' && newRole !== 'admin' && adminCount <= 1) {
+      return { success: false, error: 'Cannot demote the last remaining platform administrator.' };
+    }
+
+    const oldRole = target.role;
+    target.role = newRole;
+
+    // Update in auth accounts
+    const accounts = this.getAuthAccounts();
+    const accIdx = accounts.findIndex(a => a.user?.id === userId);
+    if (accIdx >= 0) {
+      accounts[accIdx].user.role = newRole;
+      this.saveAuthAccounts(accounts);
+    }
+
+    // Update current user if matching
+    const current = this.getCurrentUser();
+    if (current && current.id === userId) {
+      current.role = newRole;
+      this.saveCurrentUser(current);
+    }
+
+    this.appendAuditLog({
+      actorId: actorId || 'admin',
+      actorUsername: actorId || 'admin',
+      actorRole: 'admin',
+      action: 'USER_ROLE_UPDATED',
+      targetType: 'user',
+      targetId: userId,
+      details: `Updated role for @${target.username} from '${oldRole}' to '${newRole}'.`
+    });
+
+    return { success: true };
+  },
+
+  updateUserStatus(userId: string, newStatus: UserAccountStatus, actorId?: string): { success: boolean; error?: string } {
+    const users = this.getAllUsers();
+    const target = users.find(u => u.id === userId);
+    if (!target) return { success: false, error: 'User not found' };
+
+    // LAST ADMIN LOCKOUT GUARD
+    const adminCount = users.filter(u => u.role === 'admin').length;
+    if (target.role === 'admin' && (newStatus === 'suspended' || newStatus === 'banned') && adminCount <= 1) {
+      return { success: false, error: 'Cannot suspend or ban the last remaining platform administrator.' };
+    }
+
+    this.appendAuditLog({
+      actorId: actorId || 'admin',
+      actorUsername: actorId || 'admin',
+      actorRole: 'admin',
+      action: 'USER_STATUS_UPDATED',
+      targetType: 'user',
+      targetId: userId,
+      details: `Updated account status for @${target.username} to '${newStatus}'.`
+    });
+
+    return { success: true };
   }
 };
 
