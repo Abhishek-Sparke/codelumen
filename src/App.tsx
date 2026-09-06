@@ -32,6 +32,10 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => StorageService.getCurrentUser());
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => StorageService.isAuthenticated());
   const [currentView, setCurrentView] = useState<string>(() => {
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (pathname.startsWith('/discussions')) {
+      return 'discuss';
+    }
     const user = StorageService.getCurrentUser();
     if (user && user.onboarding_completed) return 'dashboard';
     if (user && !user.onboarding_completed) return 'dashboard'; // will trigger onboarding modal
@@ -41,7 +45,14 @@ export function App() {
   const [activeProblemId, setActiveProblemId] = useState<string>('p-1');
   const [activeProfileUserId, setActiveProfileUserId] = useState<string>('');
   const [activePatternId, setActivePatternId] = useState<string>('two-pointers');
-  const [activeDiscussionId, setActiveDiscussionId] = useState<string | undefined>();
+  const [activeDiscussionId, setActiveDiscussionId] = useState<string | undefined>(() => {
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (pathname.startsWith('/discussions')) {
+      const parts = pathname.split('/').filter(Boolean);
+      return parts.length > 1 ? parts[1] : undefined;
+    }
+    return undefined;
+  });
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -356,6 +367,7 @@ export function App() {
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
             onRequireAuth={() => handleOpenAuth('login')}
+            onNavigateDiscussion={(slug) => handleNavigate('discuss', slug)}
           />
         )}
 

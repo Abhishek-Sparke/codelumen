@@ -310,8 +310,8 @@ export const FORUM_SECTIONS: ForumSection[] = [
 ];
 
 export const DISCUSSION_RULES_THREAD: DiscussionPost = {
-  id: 'discussion-rules',
-  slug: 'discussion-rules',
+  id: 'rules',
+  slug: 'rules',
   title: 'Discussion Rules',
   categoryId: 'cat-general',
   categoryName: 'General Discussion',

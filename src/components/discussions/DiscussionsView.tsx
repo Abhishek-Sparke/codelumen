@@ -21,6 +21,7 @@ interface DiscussionsViewProps {
   onNavigateProfile?: (userId: string) => void;
   onNavigateProblem?: (problemId: string) => void;
   onRequireAuth?: () => void;
+  onNavigateDiscussion?: (slugOrId?: string) => void;
 }
 
 type ForumViewMode = 'categories' | 'category-threads' | 'all-threads' | 'thread-detail';
@@ -37,7 +38,8 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
   initialDiscussionId,
   onNavigateProfile,
   onNavigateProblem,
-  onRequireAuth
+  onRequireAuth,
+  onNavigateDiscussion
 }) => {
   // Navigation & view states
   const [viewMode, setViewMode] = useState<ForumViewMode>(() => {
@@ -125,11 +127,15 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
   }, [selectedCategoryId, categories]);
 
   // Handle initial discussion selection
+  // Handle initial discussion selection or URL change
   useEffect(() => {
     if (initialDiscussionId) {
       setSelectedThreadId(initialDiscussionId);
       setViewMode('thread-detail');
       setPostsPage(1);
+    } else {
+      setSelectedThreadId(null);
+      setViewMode('categories');
     }
   }, [initialDiscussionId]);
 
@@ -177,12 +183,16 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
   };
 
   const handleSelectThread = (threadIdOrSlug: string) => {
-    setSelectedThreadId(threadIdOrSlug);
+    const slug = threadIdOrSlug === 'discussion-rules' ? 'rules' : threadIdOrSlug;
+    setSelectedThreadId(slug);
     setViewMode('thread-detail');
     setPostsPage(1);
     try {
-      window.history.pushState(null, '', `/discussions/${threadIdOrSlug}`);
+      window.history.pushState(null, '', `/discussions/${slug}`);
     } catch {}
+    if (onNavigateDiscussion) {
+      onNavigateDiscussion(slug);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -207,6 +217,9 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
     try {
       window.history.pushState(null, '', '/discussions');
     } catch {}
+    if (onNavigateDiscussion) {
+      onNavigateDiscussion(undefined);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -755,11 +768,13 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
 
         {/* TOP FORUM ENTRY: Discussion Rules (Clickable top forum row with link icon) */}
         {viewMode !== 'thread-detail' && (
-          <div
-            onClick={() => handleSelectThread('discussion-rules')}
-            className="group mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#0c0c12] px-4 py-3 sm:py-3.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-md active:scale-[0.99]"
-            role="button"
-            tabIndex={0}
+          <a
+            href="/discussions/rules"
+            onClick={(e) => {
+              e.preventDefault();
+              handleSelectThread('rules');
+            }}
+            className="group mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#0c0c12] px-4 py-3 sm:py-3.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-md active:scale-[0.99] block no-underline"
             aria-label="Discussion Rules"
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -785,7 +800,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
               <LinkIcon className="h-3.5 w-3.5" />
               <ChevronRight className="h-4 w-4 text-white/30 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
             </div>
-          </div>
+          </a>
         )}
 
         {/* ========================================================================= */}
@@ -1408,16 +1423,8 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                       {activeThread.content && activeThread.content.trim().length > 0 ? (
                         renderFormattedContent(activeThread.content)
                       ) : activeThread.is_system_discussion ? (
-                        <div className="py-12 px-6 text-center rounded-xl border border-white/[0.06] bg-white/[0.02] space-y-3 my-2">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-400 mx-auto">
-                            <LinkIcon className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h4 className="text-base font-semibold text-white">Discussion rules have not been published yet.</h4>
-                            <p className="text-xs text-white/40 mt-1 max-w-md mx-auto">
-                              Official community guidelines and forum conduct standards will appear here once published by platform administrators.
-                            </p>
-                          </div>
+                        <div className="py-10 px-6 text-center rounded-xl border border-white/[0.06] bg-white/[0.02] my-2">
+                          <p className="text-sm sm:text-base text-white/80 font-medium">Discussion rules have not been published yet.</p>
                         </div>
                       ) : (
                         renderFormattedContent(activeThread.content)
@@ -1707,18 +1714,14 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
             {/* ===================================================================== */}
             {/* REPLY BOX & RICH TEXT EDITOR                                          */}
             {/* ===================================================================== */}
-            {activeThread.is_system_discussion ? (
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0c0c12] p-5 text-center text-xs text-white/40 flex items-center justify-center gap-2">
-                <Lock className="h-4 w-4 text-white/30" />
-                <span>Discussion Rules is an official read-only document. Replies and user submissions are disabled.</span>
-              </div>
-            ) : activeThread.isLocked ? (
-              <div className="rounded-2xl border border-red-500/20 bg-[#0c0c12] p-6 text-center text-xs text-red-300">
-                <Lock className="mx-auto h-6 w-6 text-red-400 mb-2" />
-                <p className="font-semibold">This discussion has been locked by a moderator.</p>
-                <p className="text-white/40 mt-1">No further replies or contributions can be posted.</p>
-              </div>
-            ) : (
+            {!activeThread.is_system_discussion && (
+              activeThread.isLocked ? (
+                <div className="rounded-2xl border border-red-500/20 bg-[#0c0c12] p-6 text-center text-xs text-red-300">
+                  <Lock className="mx-auto h-6 w-6 text-red-400 mb-2" />
+                  <p className="font-semibold">This discussion has been locked by a moderator.</p>
+                  <p className="text-white/40 mt-1">No further replies or contributions can be posted.</p>
+                </div>
+              ) : (
               <div className="rounded-2xl border border-white/[0.08] bg-[#0c0c12] p-5 sm:p-6 shadow-xl">
                 <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 mb-4">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1860,7 +1863,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                   </div>
                 </form>
               </div>
-            )}
+            ))}
           </div>
         )}
 

@@ -29,7 +29,7 @@ export class ForumService {
       if (stored) {
         const parsed: DiscussionPost[] = JSON.parse(stored);
         // Guarantee system discussion rules thread is present
-        if (!parsed.some(t => t.system_type === 'discussion_rules' || t.id === 'discussion-rules')) {
+        if (!parsed.some(t => t.system_type === 'discussion_rules' || t.id === 'rules' || t.id === 'discussion-rules')) {
           parsed.unshift(DISCUSSION_RULES_THREAD);
           try {
             localStorage.setItem(FORUM_STORAGE_KEY, JSON.stringify(parsed));
@@ -199,7 +199,7 @@ export class ForumService {
     const thread = threads.find(t => 
       t.id === idOrSlug || 
       t.slug === idOrSlug || 
-      (isRulesQuery && (t.system_type === 'discussion_rules' || t.id === 'discussion-rules' || t.slug === 'discussion-rules'))
+      (isRulesQuery && (t.system_type === 'discussion_rules' || t.id === 'rules' || t.id === 'discussion-rules' || t.slug === 'rules' || t.slug === 'discussion-rules'))
     ) || (isRulesQuery ? DISCUSSION_RULES_THREAD : undefined);
 
     if (!thread) return undefined;
