@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, NotificationItem } from './types';
 import { StorageService } from './services/storage';
-import { ALL_PROBLEMS } from './data/problems';
+import { ProblemDatabase } from './services/problemDatabase';
+import { ForumService } from './services/forumService';
+import { useCurrentRoute, navigate, getCanonicalPath, parseRoute } from './router/router';
 
 // Components
 import { Navbar } from './components/common/Navbar';
 import { MobileNav } from './components/common/MobileNav';
 import { Footer } from './components/common/Footer';
+import { NotFoundView } from './components/common/NotFoundView';
 import { CommandPalette } from './components/search/CommandPalette';
 import { AuthModal } from './components/auth/AuthModal';
 import { OnboardingWizard } from './components/auth/OnboardingWizard';
@@ -29,30 +32,11 @@ import { FirstLessonModal } from './components/lesson/FirstLessonModal';
 import { SkillAssessmentModal } from './components/assessment/SkillAssessmentModal';
 
 export function App() {
+  const currentRoute = useCurrentRoute();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => StorageService.getCurrentUser());
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => StorageService.isAuthenticated());
-  const [currentView, setCurrentView] = useState<string>(() => {
-    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-    if (pathname.startsWith('/discussions')) {
-      return 'discuss';
-    }
-    const user = StorageService.getCurrentUser();
-    if (user && user.onboarding_completed) return 'dashboard';
-    if (user && !user.onboarding_completed) return 'dashboard'; // will trigger onboarding modal
-    return 'landing';
-  });
+  const [redirectAfterLogin, setRedirectAfterLogin] = useState<string | null>(null);
 
-  const [activeProblemId, setActiveProblemId] = useState<string>('p-1');
-  const [activeProfileUserId, setActiveProfileUserId] = useState<string>('');
-  const [activePatternId, setActivePatternId] = useState<string>('two-pointers');
-  const [activeDiscussionId, setActiveDiscussionId] = useState<string | undefined>(() => {
-    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-    if (pathname.startsWith('/discussions')) {
-      const parts = pathname.split('/').filter(Boolean);
-      return parts.length > 1 ? parts[1] : undefined;
-    }
-    return undefined;
-  });
   const [problemFilterCategory, setProblemFilterCategory] = useState<string>('all');
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -69,10 +53,47 @@ export function App() {
   const [isFirstLessonOpen, setIsFirstLessonOpen] = useState(false);
   const [isAssessmentOpen, setIsAssessmentOpen] = useState(false);
 
+  // Active Problem resolution
+  const activeProblem = useMemo(() => {
+    if (currentRoute.section === 'workspace' && currentRoute.slug) {
+      return ProblemDatabase.getProblemBySlug(currentRoute.slug) || null;
+    }
+    return null;
+  }, [currentRoute.section, currentRoute.slug]);
+
+  // Active Profile User resolution
+  const activeProfileUser = useMemo(() => {
+    if (currentRoute.section === 'profile') {
+      if (currentRoute.slug) {
+        return StorageService.getUserByUsernameOrId(currentRoute.slug);
+      }
+      return currentUser;
+    }
+    return null;
+  }, [currentRoute.section, currentRoute.slug, currentUser]);
+
+  // Derive current effective view
+  const currentView = useMemo(() => {
+    if (currentRoute.isNotFound) return 'not-found';
+    if (currentRoute.section === 'landing') {
+      return isLoggedIn && currentUser ? 'dashboard' : 'landing';
+    }
+    if (currentRoute.section === 'workspace') {
+      return activeProblem ? 'workspace' : 'problem-not-found';
+    }
+    if (currentRoute.section === 'profile') {
+      if (currentRoute.slug && !activeProfileUser) return 'profile-not-found';
+      return 'profile';
+    }
+    return currentRoute.section;
+  }, [currentRoute, isLoggedIn, currentUser, activeProblem, activeProfileUser]);
+
+  // Scroll to top on route change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentView, activeProblemId]);
+  }, [currentRoute.pathname]);
 
+  // Notifications sync
   useEffect(() => {
     if (currentUser) {
       setNotifications(StorageService.getNotifications(currentUser.id));
@@ -81,94 +102,99 @@ export function App() {
     }
   }, [currentUser?.id]);
 
-  // Section 12: Protected Routes list (Discussions allows public reading)
+  // Dynamic SEO & page title
+  useEffect(() => {
+    if (currentRoute.section === 'workspace' && activeProblem) {
+      document.title = `${activeProblem.title} | CodeSpark`;
+    } else if (currentRoute.section === 'discuss') {
+      if (currentRoute.subType === 'rules') {
+        document.title = `Discussion Rules | CodeSpark`;
+      } else if (currentRoute.subType === 'category' && currentRoute.categorySlug) {
+        const cat = ForumService.getCategoryByIdOrSlug(currentRoute.categorySlug);
+        document.title = `${cat ? cat.name : 'Category'} Discussions | CodeSpark`;
+      } else if (currentRoute.slug) {
+        const thread = ForumService.getThreadByIdOrSlug(currentRoute.slug);
+        document.title = `${thread ? thread.title : 'Discussion'} | CodeSpark`;
+      } else {
+        document.title = `Discussions | CodeSpark`;
+      }
+    } else if (currentRoute.section === 'problems') {
+      document.title = `Problem Library | CodeSpark`;
+    } else if (currentRoute.section === 'saved-problems') {
+      document.title = `Saved Problems | CodeSpark`;
+    } else if (currentRoute.section === 'roadmaps') {
+      document.title = `Roadmaps & Curriculum | CodeSpark`;
+    } else if (currentRoute.section === 'patterns') {
+      document.title = `DSA Patterns Catalog | CodeSpark`;
+    } else if (currentRoute.section === 'contests') {
+      document.title = `Contests & Timed Arena | CodeSpark`;
+    } else if (currentRoute.section === 'profile') {
+      const targetUser = activeProfileUser || currentUser;
+      document.title = targetUser ? `${targetUser.name} (@${targetUser.username}) | CodeSpark` : `User Profile | CodeSpark`;
+    } else if (currentRoute.section === 'dashboard') {
+      document.title = `Dashboard | CodeSpark`;
+    } else if (currentRoute.section === 'leaderboard') {
+      document.title = `Global Leaderboard | CodeSpark`;
+    } else if (currentRoute.section === 'submissions') {
+      document.title = `Submissions History | CodeSpark`;
+    } else if (currentRoute.section === 'settings') {
+      document.title = `Settings | CodeSpark`;
+    } else if (currentRoute.section === 'admin') {
+      document.title = `Admin Panel | CodeSpark`;
+    } else if (currentRoute.isNotFound || currentView === 'problem-not-found' || currentView === 'profile-not-found') {
+      document.title = `Not Found | CodeSpark`;
+    } else {
+      document.title = `CodeSpark — Master Coding. One Spark at a Time.`;
+    }
+  }, [currentRoute, activeProblem, activeProfileUser, currentUser, currentView]);
+
+  // Protected Views
   const protectedViews = [
-    'dashboard', 'problems', 'workspace', 'roadmaps', 
-    'patterns', 'profile', 'settings', 'submissions', 
+    'dashboard', 'workspace', 'roadmaps', 
+    'patterns', 'settings', 'submissions', 
     'contests', 'leaderboard', 'admin',
     'saved', 'saved-problems'
   ];
 
-  // Route protection watcher
+  // Route protection watcher with return-to memory
   useEffect(() => {
-    if (!isLoggedIn && protectedViews.includes(currentView)) {
-      setCurrentView('landing');
-      handleOpenAuth('login');
+    if (!isLoggedIn && protectedViews.includes(currentRoute.section)) {
+      setRedirectAfterLogin(currentRoute.pathname);
+      handleOpenAuth('login', currentRoute.pathname);
     }
-  }, [isLoggedIn, currentView]);
-
-  // Sync URL popstate for discussions
-  useEffect(() => {
-    const handlePopState = () => {
-      const pathname = window.location.pathname;
-      if (pathname.startsWith('/discussions')) {
-        const parts = pathname.split('/').filter(Boolean);
-        if (parts.length > 1) {
-          setActiveDiscussionId(parts[1]);
-        } else {
-          setActiveDiscussionId(undefined);
-        }
-        setCurrentView('discuss');
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [isLoggedIn, currentRoute.section, currentRoute.pathname]);
 
   // Global navigation handler
-  const handleNavigate = (view: string, param?: string) => {
-    // Section 12: Redirect unauthenticated users to login
-    if (protectedViews.includes(view) && !isLoggedIn) {
-      handleOpenAuth('login');
+  const handleNavigate = (viewOrPath: string, param?: string) => {
+    const targetPath = getCanonicalPath(viewOrPath, param);
+    const targetRoute = parseRoute(targetPath);
+
+    if (protectedViews.includes(targetRoute.section) && !isLoggedIn) {
+      setRedirectAfterLogin(targetPath);
+      handleOpenAuth('login', targetPath);
       return;
     }
 
-    if (view === 'workspace') {
-      if (param) setActiveProblemId(param);
-      setCurrentView('workspace');
-    } else if (view === 'profile') {
-      if (param) setActiveProfileUserId(param);
-      else if (currentUser) setActiveProfileUserId(currentUser.id);
-      setCurrentView('profile');
-    } else if (view === 'patterns') {
-      if (param) setActivePatternId(param);
-      setCurrentView('patterns');
-    } else if (view === 'problems') {
-      if (param === 'saved') {
-        setCurrentView('saved-problems');
-      } else {
-        if (param) setProblemFilterCategory(param);
-        else setProblemFilterCategory('all');
-        setCurrentView('problems');
-      }
-    } else if (view === 'saved' || view === 'saved-problems') {
-      setCurrentView('saved-problems');
-    } else if (view === 'discuss') {
-      if (param) {
-        setActiveDiscussionId(param);
-        try { window.history.pushState(null, '', `/discussions/${param}`); } catch {}
-      } else {
-        setActiveDiscussionId(undefined);
-        try { window.history.pushState(null, '', '/discussions'); } catch {}
-      }
-      setCurrentView('discuss');
-    } else {
-      setCurrentView(view);
+    if (viewOrPath === 'problems' && param && param !== 'saved') {
+      setProblemFilterCategory(param);
     }
+
+    navigate(targetPath);
   };
 
-  const handleOpenAuth = (mode: 'login' | 'signup' | 'forgot' = 'login') => {
+  const handleOpenAuth = (mode: 'login' | 'signup' | 'forgot' = 'login', returnTo?: string) => {
+    if (returnTo) setRedirectAfterLogin(returnTo);
     setAuthInitialMode(mode);
     setIsAuthOpen(true);
   };
 
-  // Section 11: Clean logout flow
+  // Clean logout flow
   const handleLogout = () => {
     StorageService.logout();
     setCurrentUser(null);
     setIsLoggedIn(false);
     setIsOnboardingOpen(false);
-    setCurrentView('landing');
+    navigate('/');
     setNotifications([]);
   };
 
@@ -191,18 +217,21 @@ export function App() {
     setNotifications(notifs);
   };
 
-  // Sections 8 & 9: Auth success handling with onboarding routing
   const handleAuthSuccess = (user: UserProfile, isNewUser: boolean) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setIsAuthOpen(false);
     setNotifications(StorageService.getNotifications(user.id));
 
-    // If new user or onboarding not completed, route to onboarding wizard
-    if (isNewUser || !user.onboarding_completed) {
+    if (redirectAfterLogin) {
+      const dest = redirectAfterLogin;
+      setRedirectAfterLogin(null);
+      navigate(dest);
+    } else if (isNewUser || !user.onboarding_completed) {
       setIsOnboardingOpen(true);
+      navigate('/dashboard');
     } else {
-      setCurrentView('dashboard');
+      navigate('/dashboard');
     }
   };
 
@@ -216,7 +245,7 @@ export function App() {
     StorageService.saveCurrentUser(complete);
     setCurrentUser(complete);
     setIsOnboardingOpen(false);
-    setCurrentView('dashboard');
+    navigate('/dashboard');
   };
 
   const handleStartFirstLesson = () => {
@@ -243,8 +272,6 @@ export function App() {
     setCurrentUser(updated);
   };
 
-  const activeProblem = ALL_PROBLEMS.find(p => p.id === activeProblemId) || ALL_PROBLEMS[0];
-
   return (
     <div className="min-h-screen bg-[#09090c] text-[#ededf0] flex flex-col selection:bg-amber-500/20 selection:text-amber-200">
       
@@ -265,31 +292,43 @@ export function App() {
 
       {/* Main View Router */}
       <main className="flex-1 flex flex-col">
+        {currentView === 'not-found' && (
+          <NotFoundView type="page" identifier={currentRoute.pathname} />
+        )}
+
+        {currentView === 'problem-not-found' && (
+          <NotFoundView type="problem" identifier={currentRoute.slug} />
+        )}
+
+        {currentView === 'profile-not-found' && (
+          <NotFoundView type="profile" identifier={currentRoute.slug} />
+        )}
+
         {currentView === 'landing' && (
           <>
             <LandingHero
               onStartCoding={() => {
                 if (isLoggedIn) handleNavigate('problems');
-                else handleOpenAuth('signup');
+                else handleOpenAuth('signup', '/problems');
               }}
               onExploreRoadmap={() => {
                 if (isLoggedIn) handleNavigate('roadmaps');
-                else handleOpenAuth('signup');
+                else handleOpenAuth('signup', '/roadmap');
               }}
             />
             <LandingSections
               currentUser={currentUser}
               onStartCoding={() => {
                 if (isLoggedIn) handleNavigate('problems');
-                else handleOpenAuth('signup');
+                else handleOpenAuth('signup', '/problems');
               }}
               onExploreRoadmap={() => {
                 if (isLoggedIn) handleNavigate('roadmaps');
-                else handleOpenAuth('signup');
+                else handleOpenAuth('signup', '/roadmap');
               }}
               onSelectPattern={(patternId) => {
                 if (isLoggedIn) handleNavigate('patterns', patternId);
-                else handleOpenAuth('signup');
+                else handleOpenAuth('signup', `/patterns/${patternId}`);
               }}
             />
           </>
@@ -304,9 +343,9 @@ export function App() {
           />
         )}
 
-        {currentView === 'problems' && currentUser && (
+        {currentView === 'problems' && (
           <ProblemLibrary
-            currentUser={currentUser}
+            currentUser={currentUser || { ...StorageService.getAllUsers()[0], id: 'guest', solvedProblemIds: [], savedProblemIds: [] }}
             initialFilter={problemFilterCategory}
             onNavigate={handleNavigate}
             onToggleSave={handleToggleSaveProblem}
@@ -321,28 +360,28 @@ export function App() {
           />
         )}
 
-        {currentView === 'workspace' && currentUser && (
+        {currentView === 'workspace' && activeProblem && (
           <ProblemWorkspace
             problem={activeProblem}
-            currentUser={currentUser}
+            currentUser={currentUser || { ...StorageService.getAllUsers()[0], id: 'guest', solvedProblemIds: [], savedProblemIds: [] }}
             onSolveProblem={handleSolveProblem}
             onToggleSave={handleToggleSaveProblem}
             onNavigate={handleNavigate}
           />
         )}
 
-        {currentView === 'roadmaps' && currentUser && (
+        {currentView === 'roadmaps' && (
           <RoadmapView
-            currentUser={currentUser}
+            currentUser={currentUser || { ...StorageService.getAllUsers()[0], id: 'guest', solvedProblemIds: [], savedProblemIds: [] }}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
             onNavigatePattern={(id) => handleNavigate('patterns', id)}
           />
         )}
 
-        {currentView === 'patterns' && currentUser && (
+        {currentView === 'patterns' && (
           <PatternsView
-            currentUser={currentUser}
-            initialPatternId={activePatternId}
+            currentUser={currentUser || { ...StorageService.getAllUsers()[0], id: 'guest', solvedProblemIds: [], savedProblemIds: [] }}
+            initialPatternId={currentRoute.slug}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
         )}
@@ -351,10 +390,10 @@ export function App() {
           <SubmissionsView />
         )}
 
-        {currentView === 'profile' && currentUser && (
+        {currentView === 'profile' && activeProfileUser && (
           <UserProfileView
-            userId={activeProfileUserId || currentUser.id}
-            currentUser={currentUser}
+            userId={activeProfileUser.id}
+            currentUser={currentUser || activeProfileUser}
             onUpdateCurrentUser={(u) => setCurrentUser(u)}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />
@@ -363,7 +402,8 @@ export function App() {
         {currentView === 'discuss' && (
           <DiscussionsView
             currentUser={currentUser}
-            initialDiscussionId={activeDiscussionId}
+            initialDiscussionId={currentRoute.subType === 'rules' ? 'rules' : (currentRoute.subType === 'thread' ? currentRoute.slug : undefined)}
+            initialCategorySlug={currentRoute.subType === 'category' ? currentRoute.categorySlug : undefined}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
             onRequireAuth={() => handleOpenAuth('login')}
@@ -371,14 +411,14 @@ export function App() {
           />
         )}
 
-        {currentView === 'leaderboard' && currentUser && (
+        {currentView === 'leaderboard' && (
           <LeaderboardView
-            currentUser={currentUser}
+            currentUser={currentUser || { ...StorageService.getAllUsers()[0], id: 'guest', solvedProblemIds: [], savedProblemIds: [] }}
             onNavigateProfile={(uid) => handleNavigate('profile', uid)}
           />
         )}
 
-        {currentView === 'contests' && currentUser && (
+        {currentView === 'contests' && (
           <ContestsView
             onNavigateProblem={(id) => handleNavigate('workspace', id)}
           />

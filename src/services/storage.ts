@@ -7,6 +7,7 @@ import {
   DailyChallenge, ContestRatingHistoryItem, AchievementItem, InterviewSessionConfig
 } from '../types';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
+import { SAMPLE_USERS } from '../data/users';
 import { calculateLevel } from '../data/badges';
 
 const STORAGE_KEYS = {
@@ -92,6 +93,7 @@ export function generateSalt(): string {
 
 export const StorageService = {
   getCurrentUser(): UserProfile | null {
+    if (typeof localStorage === 'undefined') return null;
     try {
       const isAuth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE);
       if (isAuth !== 'true') return null;
@@ -164,6 +166,7 @@ export const StorageService = {
   },
 
   getAuthAccounts(): StoredAccount[] {
+    if (typeof localStorage === 'undefined') return [];
     try {
       const data = localStorage.getItem(STORAGE_KEYS.AUTH_ACCOUNTS);
       if (data) return JSON.parse(data);
@@ -512,6 +515,11 @@ export const StorageService = {
     if (current && !registeredUsers.some(u => u.id === current.id)) {
       registeredUsers.unshift(current);
     }
+    for (const sample of SAMPLE_USERS) {
+      if (!registeredUsers.some(u => u.id === sample.id || u.username.toLowerCase() === sample.username.toLowerCase())) {
+        registeredUsers.push(sample);
+      }
+    }
     return registeredUsers;
   },
 
@@ -520,6 +528,17 @@ export const StorageService = {
     if (current && (id === current.id || id === 'user-current')) return current;
     const all = this.getAllUsers();
     return all.find(u => u.id === id) || (id === current?.id ? current : null);
+  },
+
+  getUserByUsernameOrId(query: string): UserProfile | null {
+    if (!query) return null;
+    const current = this.getCurrentUser();
+    const clean = query.toLowerCase().trim();
+    if (current && (query === current.id || query === 'user-current' || current.username.toLowerCase() === clean)) {
+      return current;
+    }
+    const all = this.getAllUsers();
+    return all.find(u => u.id === query || u.username.toLowerCase() === clean) || null;
   },
 
   toggleFollowUser(targetUserId: string): { isFollowing: boolean; current: UserProfile | null } {

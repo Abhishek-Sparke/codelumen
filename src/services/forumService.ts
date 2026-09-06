@@ -48,6 +48,7 @@ export class ForumService {
    * Internal helper to persist threads to localStorage.
    */
   public static saveThreads(threads: DiscussionPost[]): void {
+    if (typeof localStorage === 'undefined') return;
     try {
       localStorage.setItem(FORUM_STORAGE_KEY, JSON.stringify(threads));
       StorageService.saveDiscussions(threads);
@@ -99,7 +100,12 @@ export class ForumService {
    */
   public static getCategoryByIdOrSlug(idOrSlug: string): ForumCategory | undefined {
     const categories = this.getCategories();
-    return categories.find(c => c.id === idOrSlug || c.slug === idOrSlug);
+    const query = (idOrSlug || '').toLowerCase().trim();
+    return categories.find(c => 
+      c.id.toLowerCase() === query || 
+      c.slug.toLowerCase() === query ||
+      c.name.toLowerCase().replace(/\s+/g, '-') === query
+    );
   }
 
   /**
@@ -197,8 +203,8 @@ export class ForumService {
     const isRulesQuery = normalized === 'rules' || normalized === 'discussion-rules' || normalized === 'server-and-forum-rules';
 
     const thread = threads.find(t => 
-      t.id === idOrSlug || 
-      t.slug === idOrSlug || 
+      t.id.toLowerCase() === normalized || 
+      (t.slug && t.slug.toLowerCase() === normalized) || 
       (isRulesQuery && (t.system_type === 'discussion_rules' || t.id === 'rules' || t.id === 'discussion-rules' || t.slug === 'rules' || t.slug === 'discussion-rules'))
     ) || (isRulesQuery ? DISCUSSION_RULES_THREAD : undefined);
 

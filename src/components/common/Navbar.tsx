@@ -5,14 +5,16 @@ import {
 } from 'lucide-react';
 import { UserProfile, NotificationItem } from '../../types';
 import { CodeSparkLogo } from '../brand/CodeSparkLogo';
+import { Link } from '../../router/Link';
 
 interface NavbarProps {
   currentView: string;
+  currentPath?: string;
   onNavigate: (view: string, param?: string) => void;
   currentUser: UserProfile | null;
   notifications: NotificationItem[];
   onOpenSearch: () => void;
-  onOpenAuth: (mode?: 'login' | 'signup') => void;
+  onOpenAuth: (mode?: 'login' | 'signup', returnTo?: string) => void;
   onMarkNotificationsRead: () => void;
   isLoggedIn?: boolean;
   onLogout?: () => void;
@@ -20,6 +22,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentView,
+  currentPath = '',
   onNavigate,
   currentUser,
   notifications,
@@ -34,19 +37,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Section 13: Logged out vs Logged in Navigation
+  const pathname = currentPath || (typeof window !== 'undefined' ? window.location.pathname : '');
+
+  // Logged out vs Logged in Navigation
   const loggedOutNavLinks = [
-    { id: 'problems', label: 'Problems' },
-    { id: 'roadmaps', label: 'Roadmaps' },
-    { id: 'landing', label: 'Features' },
+    { id: 'problems', label: 'Problems', href: '/problems' },
+    { id: 'roadmaps', label: 'Roadmap', href: '/roadmap' },
+    { id: 'discuss', label: 'Discuss', href: '/discussions' },
+    { id: 'landing', label: 'Features', href: '/' },
   ];
 
   const loggedInNavLinks = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'problems', label: 'Problems' },
-    { id: 'roadmaps', label: 'Roadmap' },
-    { id: 'contests', label: 'Contests' },
-    { id: 'discuss', label: 'Discuss' },
+    { id: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+    { id: 'problems', label: 'Problems', href: '/problems' },
+    { id: 'roadmaps', label: 'Roadmap', href: '/roadmap' },
+    { id: 'contests', label: 'Contests', href: '/contests' },
+    { id: 'discuss', label: 'Discuss', href: '/discussions' },
   ];
 
   const navLinks = isLoggedIn ? loggedInNavLinks : loggedOutNavLinks;
@@ -57,8 +63,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Brand Logo & Navigation Links */}
         <div className="flex items-center gap-8">
-          <button 
-            onClick={() => onNavigate(isLoggedIn ? 'dashboard' : 'landing')}
+          <Link 
+            href={isLoggedIn ? '/dashboard' : '/'}
             className="group flex items-center gap-2.5 text-left focus:outline-none"
             aria-label="CodeSpark Home"
           >
@@ -68,16 +74,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline-block text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40 border-l border-white/10 pl-2">
               DSA Mastery
             </span>
-          </button>
+          </Link>
 
           {/* Desktop Navigation Links */}
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main Navigation">
             {navLinks.map((link) => {
-              const isActive = currentView === link.id;
+              const isActive = 
+                pathname === link.href ||
+                (link.href !== '/' && pathname.startsWith(link.href)) ||
+                (link.id === 'problems' && (pathname.startsWith('/problems') || pathname.startsWith('/saved')));
+
               return (
-                <button
+                <Link
                   key={link.id}
-                  onClick={() => onNavigate(link.id)}
+                  href={link.href}
                   className={`relative rounded-full px-3.5 py-1.5 text-xs font-medium tracking-wide transition-all ${
                     isActive 
                       ? 'bg-white/10 text-white shadow-sm' 
@@ -88,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {isActive && (
                     <span className="absolute -bottom-[17px] left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-gradient-to-r from-amber-400 to-amber-200" />
                   )}
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -246,34 +256,38 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                       {/* Menu items */}
                       <div className="mt-1 space-y-0.5">
-                        <button
-                          onClick={() => { onNavigate('profile', currentUser.id); setShowProfileMenu(false); }}
+                        <Link
+                          href={`/profile/${currentUser.username || currentUser.id}`}
+                          onClick={() => setShowProfileMenu(false)}
                           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
                         >
                           <User className="h-3.5 w-3.5 text-white/50" />
                           Profile
-                        </button>
-                        <button
-                          onClick={() => { onNavigate('dashboard'); setShowProfileMenu(false); }}
+                        </Link>
+                        <Link
+                          href="/dashboard"
+                          onClick={() => setShowProfileMenu(false)}
                           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
                         >
                           <Sparkles className="h-3.5 w-3.5 text-white/50" />
                           Dashboard
-                        </button>
-                        <button
-                          onClick={() => { onNavigate('problems', 'saved'); setShowProfileMenu(false); }}
+                        </Link>
+                        <Link
+                          href="/problems/saved"
+                          onClick={() => setShowProfileMenu(false)}
                           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
                         >
                           <Bookmark className="h-3.5 w-3.5 text-white/50" />
                           Saved Problems ({currentUser.savedProblemIds?.length || 0})
-                        </button>
-                        <button
-                          onClick={() => { onNavigate('settings'); setShowProfileMenu(false); }}
+                        </Link>
+                        <Link
+                          href="/settings"
+                          onClick={() => setShowProfileMenu(false)}
                           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
                         >
                           <Settings className="h-3.5 w-3.5 text-white/50" />
                           Settings
-                        </button>
+                        </Link>
                         
                         <div className="my-1 border-t border-white/[0.08]" />
 

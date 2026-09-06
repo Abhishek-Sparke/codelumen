@@ -132,7 +132,13 @@ export const ProblemDatabase = {
    * Retrieves a problem by its URL slug
    */
   getProblemBySlug(slug: string): Problem | undefined {
-    const p = ALL_PROBLEMS.find(prob => prob.slug === slug || prob.id === slug);
+    if (!slug) return undefined;
+    const clean = slug.toLowerCase().trim();
+    const p = ALL_PROBLEMS.find(prob => 
+      prob.slug === clean || 
+      prob.id === clean || 
+      (clean === 'two-sum' && (prob.slug === 'two-sum-indices' || prob.id === 'p-1'))
+    );
     if (!p) return undefined;
     return {
       ...p,

@@ -1,11 +1,12 @@
 import React from 'react';
 import { CodeSparkLogo } from '../brand/CodeSparkLogo';
+import { Link } from '../../router/Link';
 
 interface FooterProps {
-  onNavigate: (view: string) => void;
+  onNavigate?: (view: string) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+export const Footer: React.FC<FooterProps> = () => {
   return (
     <footer className="border-t border-white/[0.08] bg-[#09090c] pt-16 pb-24 md:pb-16 text-white/70">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -42,24 +43,24 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <h4 className="lumen-tag text-white/90">Product</h4>
             <ul className="mt-4 space-y-2.5 text-xs">
               <li>
-                <button onClick={() => onNavigate('problems')} className="hover:text-white transition-colors">
+                <Link href="/problems" className="hover:text-white transition-colors">
                   Problems
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('roadmaps')} className="hover:text-white transition-colors">
+                <Link href="/roadmap" className="hover:text-white transition-colors">
                   Roadmaps
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('contests')} className="hover:text-white transition-colors">
+                <Link href="/contests" className="hover:text-white transition-colors">
                   Contests
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('leaderboard')} className="hover:text-white transition-colors">
+                <Link href="/leaderboard" className="hover:text-white transition-colors">
                   Leaderboard
-                </button>
+                </Link>
               </li>
             </ul>
           </div>
@@ -69,41 +70,41 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <h4 className="lumen-tag text-white/90">Resources</h4>
             <ul className="mt-4 space-y-2.5 text-xs">
               <li>
-                <button onClick={() => onNavigate('patterns')} className="hover:text-white transition-colors">
+                <Link href="/patterns" className="hover:text-white transition-colors">
                   DSA Patterns
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('roadmaps')} className="hover:text-white transition-colors">
+                <Link href="/roadmap" className="hover:text-white transition-colors">
                   Interview Roadmap
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('problems')} className="hover:text-white transition-colors">
+                <Link href="/problems" className="hover:text-white transition-colors">
                   Curated Guides
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('dashboard')} className="hover:text-white transition-colors">
+                <Link href="/dashboard" className="hover:text-white transition-colors">
                   Daily Challenges
-                </button>
+                </Link>
               </li>
             </ul>
           </div>
 
-          {/* Column 3: Community & Company */}
+          {/* Column 3: Community & Legal */}
           <div>
             <h4 className="lumen-tag text-white/90">Community & Legal</h4>
             <ul className="mt-4 space-y-2.5 text-xs">
               <li>
-                <button onClick={() => onNavigate('discuss')} className="hover:text-white transition-colors">
+                <Link href="/discussions" className="hover:text-white transition-colors">
                   Discussions
-                </button>
+                </Link>
               </li>
               <li>
-                <button onClick={() => onNavigate('settings')} className="hover:text-white transition-colors">
+                <Link href="/settings" className="hover:text-white transition-colors">
                   Preferences
-                </button>
+                </Link>
               </li>
               <li>
                 <span className="text-white/40">Privacy Policy</span>
@@ -120,13 +121,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/[0.08] pt-8 text-[11px] text-white/40 sm:flex-row">
           <p>© 2026 CodeSpark. All rights reserved. Deliberate practice for modern developers.</p>
           <div className="flex items-center gap-6">
-            <button onClick={() => onNavigate('admin')} className="hover:text-amber-400/80 transition-colors">
+            <Link href="/admin" className="hover:text-amber-400/80 transition-colors">
               Platform Admin
-            </button>
+            </Link>
             <span>v1.0.0 Production</span>
           </div>
         </div>
       </div>
     </footer>
   );
-};
+};;

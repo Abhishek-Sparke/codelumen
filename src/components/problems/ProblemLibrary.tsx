@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Problem, UserProfile } from '../../types';
 import { ProblemDatabase } from '../../services/problemDatabase';
+import { Link } from '../../router/Link';
 
 interface ProblemLibraryProps {
   currentUser: UserProfile;
@@ -410,10 +411,10 @@ export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
             const isSaved = currentUser.savedProblemIds.includes(problem.id);
             const globalIdx = (page - 1) * pageSize + idx + 1;
             return (
-              <div
+              <Link
                 key={problem.id}
-                className="grid grid-cols-[40px_1fr_auto_auto_auto_40px] sm:grid-cols-[40px_1fr_100px_100px_90px_80px_40px] items-center gap-2 px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                onClick={() => onNavigate('workspace', problem.id)}
+                href={`/problems/${problem.slug || problem.id}`}
+                className="grid grid-cols-[40px_1fr_auto_auto_auto_40px] sm:grid-cols-[40px_1fr_100px_100px_90px_80px_40px] items-center gap-2 px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer group no-underline text-inherit block"
               >
                 {/* Status Icon */}
                 <div className="flex items-center justify-center">
@@ -451,8 +452,10 @@ export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
 
                 {/* Bookmark */}
                 <button
-                  onClick={e => { e.stopPropagation(); onToggleSave(problem.id); }}
-                  className="flex items-center justify-center text-white/20 hover:text-amber-400 transition-colors"
+                  type="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleSave(problem.id); }}
+                  className="flex items-center justify-center text-white/20 hover:text-amber-400 transition-colors cursor-pointer"
+                  aria-label={isSaved ? 'Remove bookmark' : 'Bookmark problem'}
                 >
                   {isSaved ? (
                     <BookmarkCheck className="h-4 w-4 text-amber-400" />
@@ -460,7 +463,7 @@ export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
                     <Bookmark className="h-4 w-4" />
                   )}
                 </button>
-              </div>
+              </Link>
             );
           })
         )}

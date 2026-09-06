@@ -14,10 +14,14 @@ import type {
 } from '../../types';
 import { ForumService } from '../../services/forumService';
 import { SecuritySanitizer, type CodeToken } from '../../services/securitySanitizer';
+import { Link } from '../../router/Link';
+import { navigate } from '../../router/router';
+import { NotFoundView } from '../common/NotFoundView';
 
 interface DiscussionsViewProps {
   currentUser: UserProfile | null;
   initialDiscussionId?: string;
+  initialCategorySlug?: string;
   onNavigateProfile?: (userId: string) => void;
   onNavigateProblem?: (problemId: string) => void;
   onRequireAuth?: () => void;
@@ -36,6 +40,7 @@ const CATEGORY_ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
 export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
   currentUser,
   initialDiscussionId,
+  initialCategorySlug,
   onNavigateProfile,
   onNavigateProblem,
   onRequireAuth,
@@ -43,9 +48,17 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
 }) => {
   // Navigation & view states
   const [viewMode, setViewMode] = useState<ForumViewMode>(() => {
-    return initialDiscussionId ? 'thread-detail' : 'categories';
+    if (initialDiscussionId) return 'thread-detail';
+    if (initialCategorySlug) return 'category-threads';
+    return 'categories';
   });
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(() => {
+    if (initialCategorySlug) {
+      const cat = ForumService.getCategoryByIdOrSlug(initialCategorySlug);
+      return cat ? cat.id : initialCategorySlug;
+    }
+    return 'all';
+  });
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(initialDiscussionId || null);
   const [activeFilter, setActiveFilter] = useState<ThreadFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('latest');
@@ -126,18 +139,24 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
     return ForumService.getCategoryByIdOrSlug(selectedCategoryId);
   }, [selectedCategoryId, categories]);
 
-  // Handle initial discussion selection
-  // Handle initial discussion selection or URL change
+  // Handle initial discussion / category selection or URL change
   useEffect(() => {
     if (initialDiscussionId) {
       setSelectedThreadId(initialDiscussionId);
       setViewMode('thread-detail');
       setPostsPage(1);
+    } else if (initialCategorySlug) {
+      const cat = ForumService.getCategoryByIdOrSlug(initialCategorySlug);
+      setSelectedCategoryId(cat ? cat.id : initialCategorySlug);
+      setViewMode('category-threads');
+      setSelectedThreadId(null);
+      setCurrentPage(1);
     } else {
       setSelectedThreadId(null);
+      setSelectedCategoryId('all');
       setViewMode('categories');
     }
-  }, [initialDiscussionId]);
+  }, [initialDiscussionId, initialCategorySlug]);
 
   // Load draft when opening new thread modal
   useEffect(() => {
@@ -174,54 +193,6 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
     setCategories(ForumService.getCategories());
   };
 
-  // Navigation handlers
-  const handleSelectCategory = (catId: string) => {
-    setSelectedCategoryId(catId);
-    setViewMode('category-threads');
-    setCurrentPage(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectThread = (threadIdOrSlug: string) => {
-    const slug = threadIdOrSlug === 'discussion-rules' ? 'rules' : threadIdOrSlug;
-    setSelectedThreadId(slug);
-    setViewMode('thread-detail');
-    setPostsPage(1);
-    try {
-      window.history.pushState(null, '', `/discussions/${slug}`);
-    } catch {}
-    if (onNavigateDiscussion) {
-      onNavigateDiscussion(slug);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleBackToCategory = () => {
-    if (activeThread?.is_system_discussion) {
-      handleBackToAll();
-      return;
-    }
-    if (activeThread?.categoryId) {
-      setSelectedCategoryId(activeThread.categoryId);
-      setViewMode('category-threads');
-    } else {
-      setViewMode('categories');
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleBackToAll = () => {
-    setSelectedCategoryId('all');
-    setSelectedThreadId(null);
-    setViewMode('categories');
-    try {
-      window.history.pushState(null, '', '/discussions');
-    } catch {}
-    if (onNavigateDiscussion) {
-      onNavigateDiscussion(undefined);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   // Reactions toggle handler
   const handleToggleReaction = (postId: string, reactionType: ForumReactionType) => {
@@ -277,7 +248,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
       }
       if (action === 'delete') {
         showToast('Discussion deleted.');
-        setViewMode('categories');
+        navigate('/discussions');
       } else {
         showToast(`Discussion ${action}ed successfully.`);
       }
@@ -287,7 +258,10 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
 
   // Share handler
   const handleShare = () => {
-    const url = window.location.href;
+    const slug = activeThread?.slug || activeThread?.id;
+    const url = slug
+      ? `${window.location.origin}/discussions/${slug}`
+      : window.location.href;
     navigator.clipboard.writeText(url);
     showToast('Discussion link copied to clipboard!');
   };
@@ -424,8 +398,10 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
       setNewThreadTitle('');
       setNewThreadContent('');
       setNewThreadCode('');
-      setSelectedThreadId(res.thread.id);
+      const targetSlug = res.thread.slug || res.thread.id;
+      setSelectedThreadId(targetSlug);
       setViewMode('thread-detail');
+      navigate(`/discussions/${targetSlug}`);
       refreshData();
       showToast('Discussion thread created successfully!');
     });
@@ -768,12 +744,8 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
 
         {/* TOP FORUM ENTRY: Discussion Rules (Clickable top forum row with link icon) */}
         {viewMode !== 'thread-detail' && (
-          <a
+          <Link
             href="/discussions/rules"
-            onClick={(e) => {
-              e.preventDefault();
-              handleSelectThread('rules');
-            }}
             className="group mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#0c0c12] px-4 py-3 sm:py-3.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-md active:scale-[0.99] block no-underline"
             aria-label="Discussion Rules"
           >
@@ -800,7 +772,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
               <LinkIcon className="h-3.5 w-3.5" />
               <ChevronRight className="h-4 w-4 text-white/30 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
             </div>
-          </a>
+          </Link>
         )}
 
         {/* ========================================================================= */}
@@ -848,10 +820,10 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                     const IconComponent = CATEGORY_ICON_MAP[cat.iconName] || MessageSquare;
 
                     return (
-                      <div
+                      <Link
                         key={cat.id}
-                        onClick={() => handleSelectCategory(cat.id)}
-                        className="group relative rounded-xl border border-white/[0.06] bg-[#0c0c12] p-4.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-lg hover:shadow-amber-400/5"
+                        href={`/discussions/category/${cat.slug || cat.id}`}
+                        className="group relative rounded-xl border border-white/[0.06] bg-[#0c0c12] p-4.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-lg hover:shadow-amber-400/5 block no-underline"
                       >
                         <div className="flex items-start gap-3.5">
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08] text-amber-400 group-hover:scale-105 group-hover:bg-amber-400/10 transition-all">
@@ -887,7 +859,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                             )}
                           </div>
                         </div>
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
@@ -899,24 +871,28 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
         {/* ========================================================================= */}
         {/* VIEW 2: CATEGORY THREADS OR ALL THREADS LIST (COMPACT FORUM ROWS)         */}
         {/* ========================================================================= */}
-        {(viewMode === 'category-threads' || viewMode === 'all-threads') && (
+        {viewMode === 'category-threads' && !activeCategory && (
+          <NotFoundView type="category" identifier={initialCategorySlug || selectedCategoryId} />
+        )}
+
+        {(viewMode === 'all-threads' || (viewMode === 'category-threads' && activeCategory)) && (
           <div className="space-y-4 animate-in fade-in duration-200">
             
             {/* Breadcrumb Navigation */}
             <div className="flex items-center gap-2 text-xs text-white/50">
-              <button 
-                onClick={handleBackToAll}
+              <Link 
+                href="/"
                 className="hover:text-white transition-colors"
               >
                 Home
-              </button>
+              </Link>
               <ChevronRight className="h-3 w-3" />
-              <button 
-                onClick={() => { setViewMode('categories'); }}
+              <Link 
+                href="/discussions"
                 className="hover:text-white transition-colors"
               >
                 Discussions
-              </button>
+              </Link>
               {viewMode === 'category-threads' && activeCategory && (
                 <>
                   <ChevronRight className="h-3 w-3" />
@@ -985,10 +961,10 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                 </div>
               ) : (
                 threads.map(thread => (
-                  <div
+                  <Link
                     key={thread.id}
-                    onClick={() => handleSelectThread(thread.slug || thread.id)}
-                    className={`group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-white/[0.02] transition-colors cursor-pointer gap-3 ${
+                    href={`/discussions/${thread.slug || thread.id}`}
+                    className={`group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-white/[0.02] transition-colors cursor-pointer gap-3 block no-underline ${
                       thread.isPinned ? 'bg-amber-500/[0.02]' : ''
                     }`}
                   >
@@ -1042,12 +1018,13 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                               <span>·</span>
                               <span 
                                 onClick={(e) => {
+                                  e.preventDefault();
                                   e.stopPropagation();
                                   if (thread.problemId && onNavigateProblem) {
                                     onNavigateProblem(thread.problemId);
                                   }
                                 }}
-                                className="text-amber-400/80 hover:text-amber-300 hover:underline flex items-center gap-1"
+                                className="text-amber-400/80 hover:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer"
                               >
                                 Problem: {thread.problemTitle}
                               </span>
@@ -1079,7 +1056,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
@@ -1131,34 +1108,38 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
         {/* ========================================================================= */}
         {/* VIEW 3: THREAD DETAIL PAGE (CLASSIC 2-COLUMN FORUM POST LAYOUT)           */}
         {/* ========================================================================= */}
+        {viewMode === 'thread-detail' && !activeThread && (
+          <NotFoundView type="discussion" identifier={selectedThreadId || initialDiscussionId || ''} />
+        )}
+
         {viewMode === 'thread-detail' && activeThread && (
           <div className="space-y-6 animate-in fade-in duration-200">
             
             {/* Top Breadcrumb */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-white/50">
-                <button 
-                  onClick={handleBackToAll}
+                <Link 
+                  href="/"
                   className="hover:text-white transition-colors"
                 >
                   Home
-                </button>
+                </Link>
                 <ChevronRight className="h-3 w-3" />
-                <button 
-                  onClick={() => { setViewMode('categories'); }}
+                <Link 
+                  href="/discussions"
                   className="hover:text-white transition-colors"
                 >
                   Discussions
-                </button>
+                </Link>
                 {!activeThread.is_system_discussion && (
                   <>
                     <ChevronRight className="h-3 w-3" />
-                    <button 
-                      onClick={handleBackToCategory}
+                    <Link 
+                      href={activeCategory ? `/discussions/category/${activeCategory.slug || activeCategory.id}` : '/discussions'}
                       className="hover:text-white transition-colors truncate max-w-[120px]"
                     >
-                      {activeThread.categoryName || 'Category'}
-                    </button>
+                      {activeThread.categoryName || activeCategory?.name || 'Category'}
+                    </Link>
                   </>
                 )}
                 <ChevronRight className="h-3 w-3" />
@@ -1167,13 +1148,13 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                 </span>
               </div>
 
-              <button
-                onClick={activeThread.is_system_discussion ? handleBackToAll : handleBackToCategory}
+              <Link
+                href={activeThread.is_system_discussion ? '/discussions' : (activeCategory ? `/discussions/category/${activeCategory.slug || activeCategory.id}` : '/discussions')}
                 className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span>{activeThread.is_system_discussion ? 'Back to discussions' : 'Back to threads'}</span>
-              </button>
+              </Link>
             </div>
 
             {/* THREAD HEADER */}

@@ -16,6 +16,7 @@ import { AICoachPanel } from './AICoachPanel';
 import { EditorialTab } from './EditorialTab';
 import { FirstSolveModal } from './FirstSolveModal';
 import { FeatureFlagService } from '../../services/featureFlags';
+import { Link } from '../../router/Link';
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -232,9 +233,9 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   };
 
   const handleShare = () => {
-    const url = window.location.href;
+    const canonicalUrl = `${window.location.origin}/problems/${problem.slug || problem.id}`;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(url);
+      navigator.clipboard.writeText(canonicalUrl);
       setCopiedShare(true);
       setTimeout(() => setCopiedShare(false), 2000);
     }
@@ -443,6 +444,15 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                 
                 {/* Header */}
                 <div>
+                  {/* Canonical Breadcrumb */}
+                  <div className="flex items-center gap-1.5 text-xs text-white/40 mb-3">
+                    <Link href="/problems" className="hover:text-white transition-colors">Problems</Link>
+                    <span>/</span>
+                    <span className="text-white/60 truncate max-w-[140px]">{problem.topic}</span>
+                    <span>/</span>
+                    <span className="text-amber-400 font-medium truncate max-w-[200px]">{problem.title}</span>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <span className="font-mono text-xs text-white/40">{problem.id.toUpperCase()}</span>
                     <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
