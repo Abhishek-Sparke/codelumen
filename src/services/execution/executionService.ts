@@ -4,11 +4,16 @@ import {
   CodeSubmitRequest, 
   CodeSubmitResponse,
   ExecutionJobRecord,
-  SupportedLanguage 
+  SupportedLanguage,
+  Problem 
 } from '../../types';
-import { getPublicTestCases } from '../testCaseRepository';
+import { getPublicTestCases, getAllTestCasesForSubmit } from '../testCaseRepository';
 import { FeatureFlagService } from '../featureFlags';
 import { StorageService } from '../storage';
+import { JudgeEngine } from './judgeEngine';
+import { browserExecutionEngine } from './browserRunner';
+import { RunnerTestCase } from './types';
+import { ALL_PROBLEMS } from '../../data/problems';
 
 // Rate limiter state: user_id -> array of timestamps
 const rateLimitMap = new Map<string, number[]>();
@@ -147,19 +152,7 @@ export class ExecutionService {
       };
     }
 
-    // Circuit breaker check
-    if (isCircuitBreakerTripped()) {
-      return {
-        success: false,
-        status: 'SYSTEM_ERROR',
-        runtime_ms: 0,
-        memory_kb: 0,
-        total_test_cases: 0,
-        passed_test_cases: 0,
-        test_results: [],
-        error_message: 'Execution capacity temporarily unavailable. Please try again shortly.'
-      };
-    }
+    // Circuit breaker check: if tripped, we skip the network call and execute directly in browser sandbox
 
     // 1. Rate limit check
     if (!checkRateLimit(userId)) {
@@ -222,19 +215,42 @@ export class ExecutionService {
         const data: CodeRunResponse = await res.json();
         return data;
       }
-      
-      recordFailure();
-      return {
-        success: false,
-        status: 'SYSTEM_ERROR',
-        runtime_ms: 0,
-        memory_kb: 0,
-        total_test_cases: publicCases.length,
-        passed_test_cases: 0,
-        test_results: [],
-        error_message: 'Unable to determine execution result. Please try again.'
-      };
     } catch {
+      // Server unavailable or network drop: proceed to client execution fallback
+    }
+
+    // 5. Client-Side Resilient Fallback: execute directly in browser
+    try {
+      const runnerCases: RunnerTestCase[] = publicCases.map((tc) => ({
+        id: tc.id,
+        input: Array.isArray(tc.input) ? tc.input : [tc.input],
+        expectedOutput: tc.expected_output,
+        isPublic: true,
+        position: tc.position
+      }));
+
+      const runnerOutput = await browserExecutionEngine.execute({
+        problemId: req.problem_id,
+        language: req.language,
+        code: req.code,
+        testCases: runnerCases
+      });
+
+      const normalized = JudgeEngine.evaluate(runnerOutput, runnerCases);
+      recordSuccess();
+      return {
+        success: true,
+        status: normalized.status,
+        runtime_ms: normalized.runtime_ms,
+        memory_kb: normalized.memory_kb,
+        total_test_cases: normalized.total_test_cases,
+        passed_test_cases: normalized.passed_test_cases,
+        test_results: normalized.test_results,
+        stdout: normalized.stdout,
+        stderr: normalized.stderr,
+        error_message: normalized.error_message
+      };
+    } catch (fallbackErr: any) {
       recordFailure();
       return {
         success: false,
@@ -244,7 +260,7 @@ export class ExecutionService {
         total_test_cases: publicCases.length,
         passed_test_cases: 0,
         test_results: [],
-        error_message: 'Connection lost. Please check your network and retry.'
+        error_message: fallbackErr?.message || 'Unable to determine execution result. Please try again.'
       };
     }
   }
@@ -332,24 +348,7 @@ export class ExecutionService {
       };
     }
 
-    // Circuit breaker check
-    if (isCircuitBreakerTripped()) {
-      jobRecord.status = 'failed';
-      jobRecord.error_code = 'CIRCUIT_BREAKER';
-      StorageService.saveExecutionJob(jobRecord);
-      return {
-        success: false,
-        status: 'SYSTEM_ERROR',
-        runtime_ms: 0,
-        memory_kb: 0,
-        total_test_cases: 0,
-        passed_test_cases: 0,
-        test_results: [],
-        submission_id: submissionId,
-        job_id: jobId,
-        error_message: 'Execution capacity temporarily unavailable. Please wait a moment.'
-      };
-    }
+    // Circuit breaker check: if tripped, we skip the network call and evaluate directly in browser sandbox
 
     // 1. Rate limit check
     if (!checkRateLimit(req.user_id)) {
@@ -405,29 +404,74 @@ export class ExecutionService {
 
         return data;
       }
-
-      recordFailure();
-      jobRecord.status = 'failed';
-      jobRecord.error_code = 'SERVER_ERROR';
-      jobRecord.completed_at = new Date().toISOString();
-      StorageService.saveExecutionJob(jobRecord);
-
-      return {
-        success: false,
-        status: 'SYSTEM_ERROR',
-        runtime_ms: 0,
-        memory_kb: 0,
-        total_test_cases: 0,
-        passed_test_cases: 0,
-        test_results: [],
-        submission_id: submissionId,
-        job_id: jobId,
-        error_message: "We couldn't determine your submission result. Please try again."
-      };
     } catch {
+      // Server unavailable or network drop: proceed to client execution fallback
+    }
+
+    // 4. Client-Side Resilient Fallback: evaluate submission with hidden test cases masked
+    try {
+      const allCases = getAllTestCasesForSubmit(req.problem_id);
+      const publicCases = getPublicTestCases(req.problem_id);
+      const targetCases = allCases && allCases.length > 0 ? allCases : publicCases;
+
+      const runnerCases: RunnerTestCase[] = targetCases.map((tc) => ({
+        id: tc.id,
+        input: Array.isArray(tc.input) ? tc.input : [tc.input],
+        expectedOutput: tc.expected_output,
+        isPublic: tc.is_public,
+        position: tc.position
+      }));
+
+      const runnerOutput = await browserExecutionEngine.execute({
+        problemId: req.problem_id,
+        language: req.language,
+        code: req.code,
+        testCases: runnerCases
+      });
+
+      const normalized = JudgeEngine.evaluate(runnerOutput, runnerCases, jobId);
+
+      // Next recommended problem
+      const currProblem = ALL_PROBLEMS.find((p: Problem) => p.id === req.problem_id || p.slug === req.problem_id);
+      let nextRecommended;
+      if (currProblem) {
+        const nextInTopic = ALL_PROBLEMS.find((p: Problem) => p.topic === currProblem.topic && p.id !== currProblem.id);
+        const candidate = nextInTopic || ALL_PROBLEMS.find((p: Problem) => p.id !== currProblem.id);
+        if (candidate) {
+          nextRecommended = {
+            id: candidate.id,
+            slug: candidate.slug,
+            title: candidate.title,
+            difficulty: candidate.difficulty,
+            topic: candidate.topic
+          };
+        }
+      }
+
+      jobRecord.status = 'completed';
+      jobRecord.completed_at = new Date().toISOString();
+      StorageService.saveExecutionJob(jobRecord);
+      recordSuccess();
+
+      return {
+        success: true,
+        status: normalized.status,
+        runtime_ms: normalized.runtime_ms,
+        memory_kb: normalized.memory_kb,
+        total_test_cases: normalized.total_test_cases,
+        passed_test_cases: normalized.passed_test_cases,
+        test_results: normalized.test_results,
+        stdout: normalized.stdout,
+        stderr: normalized.stderr,
+        error_message: normalized.error_message,
+        submission_id: submissionId,
+        job_id: jobId,
+        next_recommended_problem: nextRecommended
+      };
+    } catch (fallbackErr: any) {
       recordFailure();
       jobRecord.status = 'failed';
-      jobRecord.error_code = 'NETWORK_ERROR';
+      jobRecord.error_code = 'CLIENT_ERROR';
       jobRecord.completed_at = new Date().toISOString();
       StorageService.saveExecutionJob(jobRecord);
 
@@ -441,7 +485,7 @@ export class ExecutionService {
         test_results: [],
         submission_id: submissionId,
         job_id: jobId,
-        error_message: 'Connection lost. Please check your network connection and retry.'
+        error_message: fallbackErr?.message || "We couldn't determine your submission result. Please try again."
       };
     }
   }
