@@ -64,8 +64,11 @@ export const AICoachService = {
   },
 
   explainPattern(problem: Problem, level: ExperienceLevel = 'Beginner'): AICoachMessage {
+    const isAnagram = problem.title.toLowerCase().includes('anagram') || problem.id === 'p-3';
     let patternDetails = problem.editorial.patternExplanation;
-    if (level === 'Beginner') {
+    if (isAnagram) {
+      patternDetails = `For Verify Anagram Strings, there are two primary valid approaches:\n\n1. **Sorting Approach (\`sorted(s) == sorted(t)\`):**\n   - **Time Complexity:** O(n log n)\n   - **Space Complexity:** O(n) (or O(1) in-place depending on language)\n   - Normalizes both strings into alphabetical order, making equality check direct.\n\n2. **Hash Map / Frequency Array Approach:**\n   - **Time Complexity:** O(n)\n   - **Space Complexity:** O(1) / O(k) (bounded by alphabet size, 26 for English)\n   - Counts character frequencies and verifies balance.\n\nBoth approaches are completely valid!`;
+    } else if (level === 'Beginner') {
       patternDetails += `\n\n**Beginner Takeaway:**\nThe main idea is avoiding double loops. Instead of comparing every element with every other element, we do a single walk and save notes in memory.`;
     } else if (level === 'Advanced') {
       patternDetails += `\n\n**Advanced Optimization:**\nConsider cache spatial locality, branch prediction predictability, and amortized constant-time lookups with low load factors.`;
@@ -74,7 +77,11 @@ export const AICoachService = {
     return {
       id: `msg-${Date.now()}`,
       sender: 'coach',
-      text: `### Pattern Breakdown: ${problem.pattern}\n\n${patternDetails}\n\n**Why it applies here:**\nThe input constraints (${problem.constraints[0] || 'large N'}) rule out quadratic brute forces. By maintaining an invariant with the **${problem.pattern}** pattern, you can reduce repetitive scans into a single linear pass.`,
+      text: `### Pattern Breakdown: ${isAnagram ? 'Sorting & Frequency Map' : problem.pattern}\n\n${patternDetails}\n\n**Why it applies here:**\n${
+        isAnagram 
+          ? 'Anagrams have identical character multi-sets. Either ordering them with sorting or tallying them with frequency counts exposes equivalence in optimal time.' 
+          : `The input constraints (${problem.constraints[0] || 'large N'}) rule out quadratic brute forces. By maintaining an invariant with the **${problem.pattern}** pattern, you can reduce repetitive scans into a single linear pass.`
+      }`,
       timestamp: 'Just now'
     };
   },
@@ -108,17 +115,21 @@ export const AICoachService = {
   },
 
   reviewComplexity(problem: Problem, userCode: string, level: ExperienceLevel = 'Beginner'): AICoachMessage {
+    const isAnagram = problem.title.toLowerCase().includes('anagram') || problem.id === 'p-3';
     const loopCount = (userCode.match(/for\s*\(|while\s*\(|\.forEach|\.map/g) || []).length;
     let timeEstimate = 'O(n)';
     let spaceEstimate = 'O(1)';
 
-    if (loopCount >= 2 && userCode.includes('for') && (userCode.match(/for/g)?.length || 0) >= 2) {
+    if (isAnagram && userCode.includes('sort')) {
+      timeEstimate = 'O(n log n) [Sorting approach: sorted(s) == sorted(t)]';
+      spaceEstimate = 'O(n) [Auxiliary memory for sorted characters]';
+    } else if (loopCount >= 2 && userCode.includes('for') && (userCode.match(/for/g)?.length || 0) >= 2) {
       timeEstimate = 'O(n²) [Potentially quadratic nested loop detected]';
     } else if (userCode.includes('sort')) {
       timeEstimate = 'O(n log n) [Sorting step detected]';
-    } else if (userCode.includes('Map') || userCode.includes('Set') || userCode.includes('{}')) {
+    } else if (userCode.includes('Map') || userCode.includes('Set') || userCode.includes('{}') || userCode.includes('count')) {
       timeEstimate = 'O(n)';
-      spaceEstimate = 'O(n) [Auxiliary hash structure detected]';
+      spaceEstimate = isAnagram ? 'O(1) [Bounded by alphabet size k=26]' : 'O(n) [Auxiliary hash structure detected]';
     }
 
     const isTLE = timeEstimate.includes('n²');
@@ -126,10 +137,10 @@ export const AICoachService = {
     return {
       id: `msg-${Date.now()}`,
       sender: 'coach',
-      text: `### Complexity Analysis\n\n- **Estimated Time:** \`${timeEstimate}\`\n- **Estimated Space:** \`${spaceEstimate}\`\n\n**Optimal Target:**\n- **Time:** \`${problem.editorial.optimal.complexity.time}\`\n- **Space:** \`${problem.editorial.optimal.complexity.space}\`\n\n${
+      text: `### Complexity Analysis\n\n- **Estimated Time:** \`${timeEstimate}\`\n- **Estimated Space:** \`${spaceEstimate}\`\n\n**Optimal Targets:**\n- **Sorting Approach:** Time: \`O(n log n)\`, Space: \`O(n)\`\n- **Frequency Map Approach:** Time: \`O(n)\`, Space: \`O(1)\`\n\n${
         isTLE 
           ? '⚠️ Watch out: your nested loops may hit Time Limit Exceeded (TLE) on large inputs.' 
-          : '✅ Your complexity is on track with the optimal algorithmic bound!'
+          : '✅ Your complexity is algorithmically sound and accepted!'
       }${
         level === 'Advanced' 
           ? '\n\n*Advanced tip:* For maximum speed in C++/Rust, pre-reserve hash table capacity to avoid rehashing latency.' 
@@ -151,14 +162,29 @@ export const AICoachService = {
 
   answerFreeform(problem: Problem, query: string, level: ExperienceLevel = 'Beginner'): AICoachMessage {
     const q = query.toLowerCase();
+    const isAnagram = problem.title.toLowerCase().includes('anagram') || problem.id === 'p-3';
     let reply = '';
 
     if (q.includes('hint')) {
       return this.getNextHint(problem, 1, level).message;
     } else if (q.includes('complexity') || q.includes('big o')) {
-      reply = `For ${problem.title}, optimal time complexity is **${problem.editorial.optimal.complexity.time}** and space complexity is **${problem.editorial.optimal.complexity.space}**.`;
+      if (isAnagram) {
+        reply = `For ${problem.title}:\n- **Sorting Approach (\`sorted(s) == sorted(t)\`):** Time: **O(n log n)**, Space: **O(n)**.\n- **Frequency Map Approach:** Time: **O(n)**, Space: **O(1)** (bounded by 26 English characters).\nBoth are valid solutions!`;
+      } else {
+        reply = `For ${problem.title}, optimal time complexity is **${problem.editorial.optimal.complexity.time}** and space complexity is **${problem.editorial.optimal.complexity.space}**.`;
+      }
     } else if (q.includes('edge case') || q.includes('cases')) {
-      reply = `Crucial edge cases to test:\n1. Array with minimum size (e.g. length = 2)\n2. All identical or duplicate elements\n3. Negative values and zeroes\n4. Target values requiring the last two elements.`;
+      reply = isAnagram 
+        ? `Crucial edge cases for Anagram verification:\n1. Strings of different lengths (immediate false)\n2. Empty strings or single character strings\n3. Anagrams with repeated letters (e.g. "aacc" vs "ccac")\n4. Identical strings.`
+        : `Crucial edge cases to test:\n1. Array with minimum size (e.g. length = 2)\n2. All identical or duplicate elements\n3. Negative values and zeroes\n4. Target values requiring the last two elements.`;
+    } else if (isAnagram) {
+      if (q.includes('sort')) {
+        reply = `Yes! The sorting approach (\`return sorted(s) == sorted(t)\`) is completely valid. It normalizes both strings into ordered sequences in **O(n log n)** time and **O(n)** space.\n\nThe alternative is a frequency map / hash map in **O(n)** time and **O(1)** space.`;
+      } else if (q.includes('hash') || q.includes('map') || q.includes('dict') || q.includes('count')) {
+        reply = `Counting character frequencies (using a hash map or 26-element array) is an optimal **O(n)** time and **O(1)** auxiliary space solution.\n\nNote that sorting (\`sorted(s) == sorted(t)\`) is also a valid, clean **O(n log n)** solution.`;
+      } else {
+        reply = `When tackling ${problem.title}, there are two established approaches:\n\n1. **Sorting Approach:** Sort both strings and compare them (\`sorted(s) == sorted(t)\`). Time: **O(n log n)**, Space: **O(n)**.\n2. **Frequency Map Approach:** Count character frequencies with a hash map or array. Time: **O(n)**, Space: **O(1)**.\n\nBoth are fully valid solutions on CodeSpark!`;
+      }
     } else {
       reply = `That's a thoughtful question regarding "${query}".\n\nWhen tackling ${problem.title}, anchor your thinking around the **${problem.pattern}** pattern. Ask yourself: what piece of state must we remember as we scan from left to right?`;
     }

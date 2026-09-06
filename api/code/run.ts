@@ -21,16 +21,53 @@ interface TestCaseResult {
   errorMessage?: string;
 }
 
+function __py_eq(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!__py_eq(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a instanceof Set && b instanceof Set) {
+    if (a.size !== b.size) return false;
+    for (const item of a) {
+      if (!b.has(item)) return false;
+    }
+    return true;
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const kA = Object.keys(a).filter(k => a[k] !== undefined);
+    const kB = Object.keys(b).filter(k => b[k] !== undefined);
+    if (kA.length !== kB.length) return false;
+    for (const k of kA) {
+      if (!__py_eq(a[k], b[k])) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 function areOutputsEquivalent(actual: any, expected: any): boolean {
   if (actual === expected) return true;
   if (actual === null || expected === null || actual === undefined || expected === undefined) {
     return actual === expected;
   }
-  if (typeof expected === 'boolean' && typeof actual === 'string') {
-    return actual.toLowerCase() === (expected ? 'true' : 'false');
+  if (typeof expected === 'boolean') {
+    if (typeof actual === 'boolean') return actual === expected;
+    if (typeof actual === 'string') return actual.toLowerCase() === (expected ? 'true' : 'false');
+    if (typeof actual === 'number') return (actual !== 0) === expected;
   }
-  if (typeof actual === 'boolean' && typeof expected === 'string') {
-    return expected.toLowerCase() === (actual ? 'true' : 'false');
+  if (typeof actual === 'boolean') {
+    if (typeof expected === 'string') return expected.toLowerCase() === (actual ? 'true' : 'false');
+    if (typeof expected === 'number') return (expected !== 0) === actual;
+  }
+  if (typeof actual === 'string' && (actual === 'True' || actual === 'False')) {
+    const actBool = actual === 'True';
+    if (typeof expected === 'boolean') return actBool === expected;
+    if (typeof expected === 'string') return actBool === (expected.toLowerCase() === 'true');
   }
   if (typeof actual === 'number' && typeof expected === 'number') {
     return Math.abs(actual - expected) < 1e-6;
@@ -62,6 +99,91 @@ function __py_in(item: any, col: any): boolean {
   return item in col;
 }
 
+function __py_get(obj: any, key: any, defaultVal: any = null): any {
+  if (obj == null) return defaultVal;
+  if (typeof obj.get === 'function') {
+    const val = obj.get(key);
+    return val !== undefined ? val : defaultVal;
+  }
+  if (key in obj && obj[key] !== undefined) {
+    return obj[key];
+  }
+  return defaultVal;
+}
+
+function __py_values(obj: any): any[] {
+  if (obj == null) return [];
+  if (typeof obj.values === 'function') return Array.from(obj.values());
+  return Object.values(obj);
+}
+
+function __py_keys(obj: any): any[] {
+  if (obj == null) return [];
+  if (typeof obj.keys === 'function') return Array.from(obj.keys());
+  return Object.keys(obj);
+}
+
+function __py_items(obj: any): any[] {
+  if (obj == null) return [];
+  if (typeof obj.entries === 'function') return Array.from(obj.entries());
+  return Object.entries(obj);
+}
+
+function __py_count(seq: any, val: any): number {
+  if (typeof seq === 'string') {
+    let cnt = 0, pos = 0;
+    while ((pos = seq.indexOf(val, pos)) !== -1) {
+      cnt++;
+      pos += (val.length || 1);
+    }
+    return cnt;
+  }
+  if (Array.isArray(seq)) {
+    return seq.filter(x => __py_eq(x, val)).length;
+  }
+  return 0;
+}
+
+function __py_len(x: any): number {
+  if (x == null) return 0;
+  if (typeof x.length === 'number') return x.length;
+  if (typeof x.size === 'number') return x.size;
+  if (typeof x === 'object') return Object.keys(x).length;
+  return 0;
+}
+
+function transformClause(clause: string): string {
+  let c = clause.trim();
+  let hasOuterParen = false;
+  if (c.startsWith('(') && c.endsWith(')')) {
+    let depth = 0;
+    let isOuter = true;
+    for (let i = 0; i < c.length - 1; i++) {
+      if (c[i] === '(') depth++;
+      else if (c[i] === ')') depth--;
+      if (depth === 0) { isOuter = false; break; }
+    }
+    if (isOuter) {
+      hasOuterParen = true;
+      c = c.substring(1, c.length - 1).trim();
+    }
+  }
+
+  if (c.includes('==')) {
+    const idx = c.indexOf('==');
+    const left = c.substring(0, idx).trim();
+    const right = c.substring(idx + 2).trim();
+    c = `__py_eq(${left}, ${right})`;
+  } else if (c.includes('!=')) {
+    const idx = c.indexOf('!=');
+    const left = c.substring(0, idx).trim();
+    const right = c.substring(idx + 2).trim();
+    c = `!__py_eq(${left}, ${right})`;
+  }
+
+  return hasOuterParen ? `(${c})` : c;
+}
+
 function convertPythonExpr(expr: string): string {
   let e = expr.trim();
   e = e.replace(/\bTrue\b/g, 'true');
@@ -69,11 +191,31 @@ function convertPythonExpr(expr: string): string {
   e = e.replace(/\bNone\b/g, 'null');
   e = e.replace(/\band\b/g, '&&');
   e = e.replace(/\bor\b/g, '||');
+
+  // Handle not in and in before standalone not
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\s+not\s+in\s+([a-zA-Z0-9_().[\]'"]+)/g, '!__py_in($1, $2)');
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\s+in\s+([a-zA-Z0-9_().[\]'"]+)/g, '__py_in($1, $2)');
+
   e = e.replace(/\bnot\b/g, '!');
-  e = e.replace(/\blen\((.*?)\)/g, '($1).length');
+  e = e.replace(/\blen\((.*?)\)/g, '__py_len($1)');
+
+  // dict and object methods
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\.get\((.*?)\)/g, '__py_get($1, $2)');
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\.values\(\)/g, '__py_values($1)');
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\.keys\(\)/g, '__py_keys($1)');
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\.items\(\)/g, '__py_items($1)');
+  e = e.replace(/([a-zA-Z0-9_().[\]'"]+)\.count\((.*?)\)/g, '__py_count($1, $2)');
+
   e = e.replace(/\.append\((.*?)\)/g, '.push($1)');
   e = e.replace(/\bprint\((.*?)\)/g, 'console.log($1)');
-  e = e.replace(/([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_]+)/g, '__py_in($1, $2)');
+
+  // Transform comparisons (== and !=) across && and ||
+  const parts = e.split(/(\s*&&\s*|\s*\|\|\s*)/);
+  for (let i = 0; i < parts.length; i += 2) {
+    parts[i] = transformClause(parts[i]);
+  }
+  e = parts.join('');
+
   return e;
 }
 
@@ -85,6 +227,7 @@ function transpilePythonToJs(pythonCode: string): string {
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
     if (!rawLine.trim() || rawLine.trim().startsWith('#')) continue;
+    if (rawLine.trim().startsWith('import ') || rawLine.trim().startsWith('from ')) continue;
 
     const indentMatch = rawLine.match(/^(\s*)/);
     const currentIndent = indentMatch ? indentMatch[1].length : 0;
@@ -153,6 +296,16 @@ function transpilePythonToJs(pythonCode: string): string {
       continue;
     }
 
+    const forTwoMatch = line.match(/^for\s+([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s+in\s+(.*?):/);
+    if (forTwoMatch) {
+      const v1 = forTwoMatch[1];
+      const v2 = forTwoMatch[2];
+      const iter = convertPythonExpr(forTwoMatch[3]);
+      outLines.push(' '.repeat(currentIndent) + 'for (const [' + v1 + ', ' + v2 + '] of ' + iter + ') {');
+      indentStack.push(currentIndent + 4);
+      continue;
+    }
+
     const forInMatch = line.match(/^for\s+([a-zA-Z0-9_]+)\s+in\s+(.*?):/);
     if (forInMatch) {
       const varName = forInMatch[1];
@@ -211,12 +364,12 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
       runnableJs = transpilePythonToJs(code);
     }
 
-    // Extract all function definitions
+    // Extract all function and class definitions
     const funcNames: string[] = [];
-    const funcRegex = /(?:function\s+([a-zA-Z0-9_]+)|(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>))/g;
+    const funcRegex = /(?:function\s+([a-zA-Z0-9_]+)|class\s+([a-zA-Z0-9_]+)|(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>))/g;
     let match: RegExpExecArray | null;
     while ((match = funcRegex.exec(runnableJs)) !== null) {
-      const name = match[1] || match[2];
+      const name = match[1] || match[2] || match[3];
       if (name && !funcNames.includes(name)) {
         funcNames.push(name);
       }
@@ -225,26 +378,133 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
     const checks = funcNames.map(f => 'if (typeof ' + f + ' === "function") return ' + f + ';').join('\n');
 
     const runnerFactory = new Function(`
+      function __py_eq(a, b) {
+        if (a === b) return true;
+        if (a == null || b == null) return a === b;
+        if (Array.isArray(a) && Array.isArray(b)) {
+          if (a.length !== b.length) return false;
+          for (let i = 0; i < a.length; i++) {
+            if (!__py_eq(a[i], b[i])) return false;
+          }
+          return true;
+        }
+        if (a instanceof Set && b instanceof Set) {
+          if (a.size !== b.size) return false;
+          for (const item of a) {
+            if (!b.has(item)) return false;
+          }
+          return true;
+        }
+        if (typeof a === 'object' && typeof b === 'object') {
+          const kA = Object.keys(a).filter(k => a[k] !== undefined);
+          const kB = Object.keys(b).filter(k => b[k] !== undefined);
+          if (kA.length !== kB.length) return false;
+          for (const k of kA) {
+            if (!__py_eq(a[k], b[k])) return false;
+          }
+          return true;
+        }
+        return false;
+      }
       function __py_in(item, col) {
         if (col == null) return false;
         if (typeof col.has === 'function') return col.has(item);
         if (Array.isArray(col) || typeof col === 'string') return col.indexOf(item) !== -1;
         return item in col;
       }
+      function __py_get(obj, key, defaultVal = null) {
+        if (obj == null) return defaultVal;
+        if (typeof obj.get === 'function') {
+          const val = obj.get(key);
+          return val !== undefined ? val : defaultVal;
+        }
+        if (key in obj && obj[key] !== undefined) {
+          return obj[key];
+        }
+        return defaultVal;
+      }
+      function __py_values(obj) {
+        if (obj == null) return [];
+        if (typeof obj.values === 'function') return Array.from(obj.values());
+        return Object.values(obj);
+      }
+      function __py_keys(obj) {
+        if (obj == null) return [];
+        if (typeof obj.keys === 'function') return Array.from(obj.keys());
+        return Object.keys(obj);
+      }
+      function __py_items(obj) {
+        if (obj == null) return [];
+        if (typeof obj.entries === 'function') return Array.from(obj.entries());
+        return Object.entries(obj);
+      }
+      function __py_count(seq, val) {
+        if (typeof seq === 'string') {
+          let cnt = 0, pos = 0;
+          while ((pos = seq.indexOf(val, pos)) !== -1) {
+            cnt++;
+            pos += (val.length || 1);
+          }
+          return cnt;
+        }
+        if (Array.isArray(seq)) {
+          return seq.filter(x => __py_eq(x, val)).length;
+        }
+        return 0;
+      }
+      function __py_len(x) {
+        if (x == null) return 0;
+        if (typeof x.length === 'number') return x.length;
+        if (typeof x.size === 'number') return x.size;
+        if (typeof x === 'object') return Object.keys(x).length;
+        return 0;
+      }
+      function Counter(iterable) {
+        const counts = {};
+        for (const item of (iterable || [])) {
+          counts[item] = (counts[item] || 0) + 1;
+        }
+        return counts;
+      }
+      function defaultdict(defaultFactory) {
+        return new Proxy({}, {
+          get(target, prop) {
+            if (prop === 'get') {
+              return (key, d = null) => (target[key] !== undefined ? target[key] : (d !== null ? d : (defaultFactory ? defaultFactory() : 0)));
+            }
+            if (!(prop in target) && typeof prop === 'string' && prop !== 'toJSON') {
+              target[prop] = defaultFactory ? defaultFactory() : 0;
+            }
+            return target[prop];
+          }
+        });
+      }
+      function enumerate(iterable) {
+        return Array.from(iterable || []).map((item, idx) => [idx, item]);
+      }
       function set(iterable) { return new Set(iterable || []); }
       function dict(entries) { return new Map(entries || []); }
       function list(iterable) { return Array.from(iterable || []); }
       function min(...args) {
-        if (args.length === 1 && Array.isArray(args[0])) return Math.min(...args[0]);
+        if (args.length === 1 && (Array.isArray(args[0]) || typeof args[0] === 'string')) return Math.min(...Array.from(args[0]));
         return Math.min(...args);
       }
       function max(...args) {
-        if (args.length === 1 && Array.isArray(args[0])) return Math.max(...args[0]);
+        if (args.length === 1 && (Array.isArray(args[0]) || typeof args[0] === 'string')) return Math.max(...Array.from(args[0]));
         return Math.max(...args);
       }
       function sum(arr) { return (arr || []).reduce((a, b) => a + b, 0); }
       function abs(x) { return Math.abs(x); }
-      function sorted(arr) { return [...(arr || [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); }
+      function sorted(arr, keyFunc, reverse = false) {
+        const copy = [...(arr || [])];
+        copy.sort((a, b) => {
+          const valA = keyFunc ? keyFunc(a) : a;
+          const valB = keyFunc ? keyFunc(b) : b;
+          return valA < valB ? -1 : valA > valB ? 1 : 0;
+        });
+        if (reverse) copy.reverse();
+        return copy;
+      }
 
       ${runnableJs};
       ${checks}

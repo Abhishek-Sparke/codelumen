@@ -387,11 +387,20 @@ export class GroundedMentorEngine implements SparkAIProvider {
   public reviewApproach(ctx: SparkPromptContext): SparkResponse {
     const text = (ctx.approachText || '').toLowerCase();
     const problem = this.resolveProblem(ctx);
+    const isAnagram = (problem?.title || '').toLowerCase().includes('anagram') || (problem?.id || '') === 'p-3';
     const pattern = (problem?.pattern || '').toLowerCase();
 
     let feedback = '';
     if (!text || text.length < 5) {
       feedback = `Please outline your planned strategy in words (e.g. *"I plan to use a hash map to remember previously seen numbers as I iterate"*). Spark will validate your reasoning before you write a single line of code!`;
+    } else if (isAnagram) {
+      if (text.includes('sort')) {
+        feedback = `Sorting both strings (e.g., \`return sorted(s) == sorted(t)\`) is a completely valid and elegant approach! It rearranges characters alphabetically so they can be compared directly in **O(n log n)** time and **O(n)** (or O(1) in-place depending on language) space. You can also solve it in **O(n)** time and **O(1)** auxiliary space with a frequency map.`;
+      } else if (text.includes('hash') || text.includes('map') || text.includes('dict') || text.includes('count') || text.includes('freq')) {
+        feedback = `A frequency counting approach (hash map or 26-element array) is an optimal **O(n)** time and **O(1)** space approach! You count character frequencies across both strings and ensure they match. Note that sorting (\`sorted(s) == sorted(t)\`) is also a valid **O(n log n)** alternative.`;
+      } else {
+        feedback = `For ${problem?.title || 'Anagram verification'}, both **Sorting** (O(n log n) time, O(n) space) and **Frequency Counting / Hash Map** (O(n) time, O(1) space) are valid approaches. Choose the one that best fits your implementation style!`;
+      }
     } else if (text.includes('sort') && pattern.includes('pointer')) {
       feedback = `Sorting the input enables two-pointer convergence from both ends in **O(n log n)** time! However, double check whether the problem asks for **original indices**—if it does, sorting directly will scramble them unless you store \`(value, original_index)\` pairs first.`;
     } else if (text.includes('hash') || text.includes('map') || text.includes('dict') || text.includes('set')) {

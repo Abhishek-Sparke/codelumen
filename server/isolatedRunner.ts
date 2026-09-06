@@ -27,6 +27,9 @@ export function areOutputsEquivalent(actual: any, expected: any): boolean {
     if (typeof expected === 'boolean' && typeof actual === 'string') {
       return actual.toLowerCase() === (expected ? 'true' : 'false');
     }
+    if (typeof actual === 'boolean' && typeof expected === 'string') {
+      return expected.toLowerCase() === (actual ? 'true' : 'false');
+    }
     return false;
   }
 
