@@ -21,6 +21,15 @@ export interface FeatureFlags {
   ACHIEVEMENTS: boolean;
   INTERVIEW_MODE: boolean;
   FOCUS_MODE: boolean;
+  // Phase 6 Spark AI Flags
+  SPARK_AI: boolean;
+  SPARK_HINTS: boolean;
+  SPARK_DEBUG: boolean;
+  SPARK_CODE_REVIEW: boolean;
+  SPARK_COMPLEXITY: boolean;
+  SPARK_RECOMMENDATIONS: boolean;
+  SPARK_INTERVIEW_COACH: boolean;
+  SPARK_WEEKLY_INSIGHTS: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -41,6 +50,15 @@ const DEFAULT_FLAGS: FeatureFlags = {
   ACHIEVEMENTS: true,
   INTERVIEW_MODE: true,
   FOCUS_MODE: true,
+  // Phase 6 Flags (Enabled by default)
+  SPARK_AI: true,
+  SPARK_HINTS: true,
+  SPARK_DEBUG: true,
+  SPARK_CODE_REVIEW: true,
+  SPARK_COMPLEXITY: true,
+  SPARK_RECOMMENDATIONS: true,
+  SPARK_INTERVIEW_COACH: true,
+  SPARK_WEEKLY_INSIGHTS: true,
 };
 
 export class FeatureFlagService {
@@ -70,24 +88,11 @@ export class FeatureFlagService {
   }
 
   public static getAllFlags(): FeatureFlags {
-    return {
-      CODE_EXECUTION_ENABLED: this.getFlag('CODE_EXECUTION_ENABLED'),
-      PYTHON_EXECUTION_ENABLED: this.getFlag('PYTHON_EXECUTION_ENABLED'),
-      JS_EXECUTION_ENABLED: this.getFlag('JS_EXECUTION_ENABLED'),
-      CPP_EXECUTION_ENABLED: this.getFlag('CPP_EXECUTION_ENABLED'),
-      JAVA_EXECUTION_ENABLED: this.getFlag('JAVA_EXECUTION_ENABLED'),
-      SPARK_AI_ENABLED: this.getFlag('SPARK_AI_ENABLED'),
-      PROBLEM_LIBRARY_V2: this.getFlag('PROBLEM_LIBRARY_V2'),
-      STUDY_PLANS: this.getFlag('STUDY_PLANS'),
-      DAILY_CHALLENGE: this.getFlag('DAILY_CHALLENGE'),
-      RECOMMENDATIONS: this.getFlag('RECOMMENDATIONS'),
-      PERSONAL_LISTS: this.getFlag('PERSONAL_LISTS'),
-      CONTESTS: this.getFlag('CONTESTS'),
-      CONTEST_RATINGS: this.getFlag('CONTEST_RATINGS'),
-      ACHIEVEMENTS: this.getFlag('ACHIEVEMENTS'),
-      INTERVIEW_MODE: this.getFlag('INTERVIEW_MODE'),
-      FOCUS_MODE: this.getFlag('FOCUS_MODE'),
-    };
+    const flags = {} as FeatureFlags;
+    for (const key of Object.keys(DEFAULT_FLAGS) as (keyof FeatureFlags)[]) {
+      flags[key] = this.getFlag(key);
+    }
+    return flags;
   }
 
   /**

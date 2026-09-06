@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   CheckCircle2, Circle, ArrowRight, Clock, 
-  Zap, Compass, ChevronRight, Sparkles, BookOpen, Layers
+  Zap, Compass, ChevronRight, Sparkles, BookOpen, Layers, Bot, X
 } from 'lucide-react';
 import { UserProfile, Problem } from '../../types';
 import { 
@@ -9,6 +9,7 @@ import {
   ROADMAP_PROBLEMS_MAPPING, 
   ProblemDatabase 
 } from '../../services/problemDatabase';
+import { FeatureFlagService } from '../../services/featureFlags';
 
 interface RoadmapViewProps {
   currentUser: UserProfile;
@@ -47,6 +48,7 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
   }, [currentUser.experienceLevel]);
 
   const [selectedSectionId, setSelectedSectionId] = useState<string>(suggestedStartingSectionId);
+  const [showExplainModal, setShowExplainModal] = useState(false);
 
   // Calculate status for each section
   const sectionsWithStatus = useMemo(() => {
@@ -230,6 +232,15 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
                   <span>Study Pattern Guide</span>
                 </button>
               )}
+              {FeatureFlagService.getFlag('SPARK_AI') && (
+                <button
+                  onClick={() => setShowExplainModal(true)}
+                  className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors"
+                >
+                  <Bot className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Explain with Spark</span>
+                </button>
+              )}
               {sectionProblems.find(sp => !sp.isSolved) && (
                 <button
                   onClick={() => onNavigateProblem(sectionProblems.find(sp => !sp.isSolved)!.problem.id)}
@@ -306,6 +317,87 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
         </div>
 
       </div>
+
+      {/* Phase 6: Topic Explanation Modal (Req 19) */}
+      {showExplainModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in zoom-in-95 duration-150">
+          <div className="max-w-xl w-full rounded-2xl border border-amber-500/30 bg-[#0d0d14] p-6 space-y-4 shadow-2xl shadow-amber-500/10 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Bot className="h-5 w-5" />
+                <h3 className="font-bold text-sm text-white">Spark Topic Mentor: {selectedSection.name}</h3>
+              </div>
+              <button
+                onClick={() => setShowExplainModal(false)}
+                className="text-white/40 hover:text-white text-xs p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-white/70">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-1">
+                <span className="font-bold text-white block text-xs">📌 Prerequisites</span>
+                <p className="text-[11px] text-white/60">
+                  Solid understanding of zero-indexed arrays, pointer increments/decrements, and basic hash table lookup semantics.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-1">
+                <span className="font-bold text-amber-300 block text-xs">⚡ Core Concepts</span>
+                <p className="text-[11px] text-white/60">
+                  {selectedSection.description}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-1">
+                <span className="font-bold text-cyan-300 block text-xs">🔍 Recognition Clues</span>
+                <ul className="text-[11px] text-white/60 list-disc pl-4 space-y-0.5">
+                  <li>Input is sorted or ordered pairs are queried.</li>
+                  <li>Requirement asks for continuous subarrays or optimization of sliding window criteria.</li>
+                  <li>Targeting linear O(n) or logarithmic O(log n) time constraints where brute force is O(n²).</li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-1">
+                <span className="font-bold text-rose-300 block text-xs">⚠️ Common Mistakes</span>
+                <ul className="text-[11px] text-white/60 list-disc pl-4 space-y-0.5">
+                  <li>Off-by-one errors on pointer bounds (e.g. left &lt; right vs left &lt;= right).</li>
+                  <li>Premature termination before evaluating duplicate elements.</li>
+                  <li>Failing to reset window state when sliding right boundary forward.</li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
+                <span className="font-bold text-emerald-300 block text-xs">🎯 Curated CodeSpark Problems</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {sectionProblems.slice(0, 4).map(sp => (
+                    <button
+                      key={sp.problem.id}
+                      onClick={() => {
+                        setShowExplainModal(false);
+                        onNavigateProblem(sp.problem.id);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-amber-400 hover:text-black border border-white/10 text-[11px] text-white/80 transition-all font-medium"
+                    >
+                      {sp.problem.title} ({sp.problem.difficulty})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowExplainModal(false)}
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs transition-colors"
+              >
+                Understood, Let&apos;s Practice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

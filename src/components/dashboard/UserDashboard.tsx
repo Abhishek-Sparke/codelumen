@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { 
   Flame, CheckCircle2, Award, Trophy, ArrowRight, Play, 
   Clock, Compass, Sparkles, TrendingUp, ChevronRight, BookOpen, 
-  CheckCircle, Circle, Layers, Activity 
+  CheckCircle, Circle, Layers, Activity, Bot, Target, Zap
 } from 'lucide-react';
 import { UserProfile, Problem } from '../../types';
 import { ALL_PROBLEMS } from '../../data/problems';
@@ -13,6 +13,7 @@ import {
   ROADMAP_PROBLEMS_MAPPING, 
   ProblemDatabase 
 } from '../../services/problemDatabase';
+import { FeatureFlagService } from '../../services/featureFlags';
 
 interface UserDashboardProps {
   currentUser: UserProfile;
@@ -74,6 +75,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   // Real Submissions Activity (no fake items)
   const realSubmissions = StorageService.getSubmissions().slice(0, 5);
+
+  // Spark Weekly Insight from authentic user activity (Phase 6, Req 17)
+  const sparkWeeklyInsight = useMemo(() => {
+    const solvedProblems = ALL_PROBLEMS.filter(p => currentUser.solvedProblemIds.includes(p.id));
+    const patternCounts: Record<string, number> = {};
+    solvedProblems.forEach(p => {
+      patternCounts[p.pattern] = (patternCounts[p.pattern] || 0) + 1;
+    });
+
+    const sortedPatterns = Object.entries(patternCounts).sort((a, b) => b[1] - a[1]);
+    const topStrength = sortedPatterns[0] ? sortedPatterns[0][0] : 'Arrays & Hashing';
+    
+    // Find weak pattern: from common core patterns, find one with least/zero solves
+    const allCorePatterns = ['Arrays & Hashing', 'Two Pointers', 'Sliding Window', 'Stack', 'Binary Search', 'Trees', 'Dynamic Programming'];
+    const weakPattern = allCorePatterns.find(pat => (patternCounts[pat] || 0) === 0) || 'Dynamic Programming';
+    
+    // Recommended problem for practice based on weak pattern
+    const recommendedProblem = ALL_PROBLEMS.find(p => 
+      !currentUser.solvedProblemIds.includes(p.id) && 
+      p.pattern.toLowerCase().includes(weakPattern.toLowerCase().slice(0, 5))
+    ) || ALL_PROBLEMS.find(p => !currentUser.solvedProblemIds.includes(p.id)) || ALL_PROBLEMS[0];
+
+    return {
+      totalSolvedThisWeek: solvedProblems.length,
+      topStrength,
+      needsPractice: weakPattern,
+      recommendedProblem
+    };
+  }, [currentUser.solvedProblemIds]);
 
   // =========================================================================
   // 1. ZERO-PROGRESS FIRST-TIME DASHBOARD (Sections 9, 27, 31)
@@ -519,6 +549,50 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
 
       </div>
+
+      {/* PHASE 6: SPARK WEEKLY INSIGHT (Req 17) */}
+      {FeatureFlagService.getFlag('SPARK_WEEKLY_INSIGHTS') && (
+        <div className="glass-panel rounded-3xl p-6 sm:p-7 border border-amber-500/25 bg-gradient-to-r from-amber-500/[0.04] via-black/40 to-transparent relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <Bot className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 font-mono">Spark Weekly Insight</span>
+                  <span className="rounded-full bg-amber-400/10 px-2 py-0.2 text-[10px] text-amber-300 font-medium">Deliberate Practice</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
+                  Algorithmic Focus & Weakness Analysis
+                </h3>
+                <p className="text-xs text-white/60 mt-1 max-w-2xl leading-relaxed">
+                  You have solved <strong className="text-white">{sparkWeeklyInsight.totalSolvedThisWeek} problems</strong> in CodeSpark. 
+                  Your strongest pattern is <span className="text-emerald-400 font-semibold">{sparkWeeklyInsight.topStrength}</span>. 
+                  Recommended focus area: <span className="text-amber-400 font-semibold">{sparkWeeklyInsight.needsPractice}</span> to round out your interview readiness.
+                </p>
+              </div>
+            </div>
+
+            {sparkWeeklyInsight.recommendedProblem && (
+              <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] text-white/40 block">Target Practice</span>
+                  <span className="text-xs font-bold text-white block">{sparkWeeklyInsight.recommendedProblem.title}</span>
+                  <span className="text-[10px] text-amber-400 font-mono">{sparkWeeklyInsight.recommendedProblem.difficulty}</span>
+                </div>
+                <button
+                  onClick={() => onNavigate('workspace', sparkWeeklyInsight.recommendedProblem.id)}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black px-4 py-2 text-xs font-bold transition-all active:scale-95 shadow-md shadow-amber-500/20"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Practice Target</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* RECOMMENDED FOR YOU */}
       <div>

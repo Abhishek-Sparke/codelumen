@@ -17,6 +17,7 @@ import { SecuritySanitizer, type CodeToken } from '../../services/securitySaniti
 import { Link } from '../../router/Link';
 import { navigate } from '../../router/router';
 import { NotFoundView } from '../common/NotFoundView';
+import { FeatureFlagService } from '../../services/featureFlags';
 
 interface DiscussionsViewProps {
   currentUser: UserProfile | null;
@@ -780,25 +781,6 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
         {/* ========================================================================= */}
         {viewMode === 'categories' && (
           <div className="space-y-8 animate-in fade-in duration-200">
-            
-            {/* Header intro */}
-            <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-r from-amber-500/5 via-transparent to-blue-500/5 p-6 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-white">Welcome to CodeSpark Developer Forums</h2>
-                <p className="text-xs text-white/60 mt-1 max-w-2xl">
-                  Engage in algorithmic breakdowns, discuss modern language quirks, share interview loops, and exchange technical insights with vetted engineers.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => requireAuthAction(() => setIsCreatingThread(true))}
-                  className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-semibold text-black hover:bg-amber-300 transition-all cursor-pointer whitespace-nowrap"
-                >
-                  + New Discussion
-                </button>
-              </div>
-            </div>
-
             {/* Render 4 Hierarchical Sections */}
             {sections.map(section => (
               <div key={section.id} className="space-y-3">
@@ -1928,13 +1910,33 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                     <label className="block font-semibold text-white/70">
                       Discussion Content <span className="text-red-400">* (min 20 chars)</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setNewThreadPreview(prev => !prev)}
-                      className="text-amber-400/80 hover:text-amber-300 transition-colors"
-                    >
-                      {newThreadPreview ? 'Edit text' : 'Live preview'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {FeatureFlagService.getFlag('SPARK_AI') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newThreadContent.trim()) {
+                              showToast('Type a draft of your question first.');
+                              return;
+                            }
+                            const refined = `### Context & Overview\n${newThreadContent.trim()}\n\n### What I Tried\n- Analyzed the constraints and sample cases\n- Evaluated time/space bounds\n\n### Where I Am Seeking Help\nLooking for intuition on the core invariant.`;
+                            setNewThreadContent(refined);
+                            showToast('Spark structured your question into clean sections.');
+                          }}
+                          className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors font-semibold text-[11px]"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>Refine with Spark</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setNewThreadPreview(prev => !prev)}
+                        className="text-white/60 hover:text-white transition-colors"
+                      >
+                        {newThreadPreview ? 'Edit text' : 'Live preview'}
+                      </button>
+                    </div>
                   </div>
 
                   {newThreadPreview ? (

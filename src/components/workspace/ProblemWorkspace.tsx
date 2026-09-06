@@ -15,6 +15,9 @@ import { ALL_PROBLEMS } from '../../data/problems';
 import { AICoachPanel } from './AICoachPanel';
 import { EditorialTab } from './EditorialTab';
 import { FirstSolveModal } from './FirstSolveModal';
+import { SparkDrawer } from '../spark/SparkDrawer';
+import { SparkDiffModal } from '../spark/SparkDiffModal';
+import { SparkActionType, SparkDiffSuggestion } from '../../types/spark';
 import { FeatureFlagService } from '../../services/featureFlags';
 import { Link } from '../../router/Link';
 
@@ -70,6 +73,21 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
   const [selectedSubmissionView, setSelectedSubmissionView] = useState<Submission | null>(null);
   const [solveXpEarned, setSolveXpEarned] = useState<number>(100);
   const [nextProblem, setNextProblem] = useState<Problem | null>(null);
+
+  // Spark AI Drawer and Diff Modal state
+  const [isSparkDrawerOpen, setIsSparkDrawerOpen] = useState(false);
+  const [sparkDrawerAction, setSparkDrawerAction] = useState<SparkActionType>('hint');
+  const [activeDiffSuggestion, setActiveDiffSuggestion] = useState<SparkDiffSuggestion | null>(null);
+
+  const handleOpenSpark = (action: SparkActionType = 'hint') => {
+    setSparkDrawerAction(action);
+    setIsSparkDrawerOpen(true);
+  };
+
+  const handleApplyCodeDiff = (suggestedCode: string) => {
+    setCode(suggestedCode);
+    setActiveDiffSuggestion(null);
+  };
 
   // Feature flag status checks for rollback and resilience
   const isExecutionEnabled = FeatureFlagService.getFlag('CODE_EXECUTION_ENABLED');
@@ -663,6 +681,18 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
 
+              {/* Spark AI Mentor Button */}
+              {FeatureFlagService.getFlag('SPARK_AI') && (
+                <button
+                  onClick={() => handleOpenSpark('hint')}
+                  title="Ask Spark AI (Hints, Debug, Patterns, Complexity)"
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 transition-all active:scale-95 shadow-sm shadow-amber-500/10"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Ask Spark</span>
+                </button>
+              )}
+
               {/* Run button */}
               <button
                 onClick={handleRunCode}
@@ -866,16 +896,25 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
                       {/* Action buttons on failure */}
                       {executionResult && executionResult.status !== 'Accepted' && (
                         <div className="flex items-center gap-2 pt-1">
+                          {FeatureFlagService.getFlag('SPARK_AI') && (
+                            <button
+                              onClick={() => handleOpenSpark('submission_analysis')}
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-[11px] text-amber-300 font-bold hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm shadow-amber-500/10"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                              <span>Ask Spark why</span>
+                            </button>
+                          )}
                           {isAiEnabled && (
                             <button
                               onClick={() => {
                                 setActiveLeftTab('aicoach');
                                 setMobileTab('aicoach');
                               }}
-                              className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300 font-semibold hover:bg-amber-500/20 transition-colors"
+                              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/70 hover:text-white transition-colors"
                             >
-                              <Bot className="h-3 w-3 text-amber-400" />
-                              <span>Ask Spark AI</span>
+                              <Bot className="h-3 w-3 text-white/50" />
+                              <span>Legacy AI Tab</span>
                             </button>
                           )}
                           {problem.hints.length > 0 && revealedHintCount === 0 && (
@@ -1099,10 +1138,26 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Complexity Analysis with Spark AI notice */}
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-xs flex items-center justify-between">
-              <span className="text-white/50">Complexity Analysis:</span>
-              <span className="text-[11px] font-semibold text-amber-300">Available with Spark AI</span>
+            {/* Complexity Analysis with Spark AI review */}
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-amber-400" />
+                <span className="text-white/80 font-medium">Mentor Code Review</span>
+              </div>
+              {FeatureFlagService.getFlag('SPARK_AI') ? (
+                <button
+                  onClick={() => {
+                    setShowCelebration(false);
+                    handleOpenSpark('submission_analysis');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-bold transition-all flex items-center gap-1"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Review with Spark</span>
+                </button>
+              ) : (
+                <span className="text-[11px] font-semibold text-amber-300">Available with Spark AI</span>
+              )}
             </div>
 
             {/* Next Recommended Problem Section */}
@@ -1160,6 +1215,29 @@ export const ProblemWorkspace: React.FC<ProblemWorkspaceProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 6: Spark AI Drawer */}
+      <SparkDrawer
+        isOpen={isSparkDrawerOpen}
+        onClose={() => setIsSparkDrawerOpen(false)}
+        initialAction={sparkDrawerAction}
+        problem={problem}
+        currentCode={code}
+        selectedLanguage={selectedLanguage}
+        executionResult={executionResult}
+        onApplyCodeDiff={handleApplyCodeDiff}
+        onPreviewDiff={(diff) => setActiveDiffSuggestion(diff)}
+      />
+
+      {/* Phase 6: Spark Safe Code Diff Modal */}
+      {activeDiffSuggestion && (
+        <SparkDiffModal
+          isOpen={!!activeDiffSuggestion}
+          onClose={() => setActiveDiffSuggestion(null)}
+          diff={activeDiffSuggestion}
+          onApply={handleApplyCodeDiff}
+        />
       )}
 
     </div>

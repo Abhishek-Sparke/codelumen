@@ -14,6 +14,7 @@ import {
   handleToggleWatch,
   handleToggleBookmark
 } from './server/forumController'
+import { handleSparkAction } from './server/sparkController'
 
 function codesparkApiPlugin(): Plugin {
   return {
@@ -22,6 +23,33 @@ function codesparkApiPlugin(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const parsedUrl = new URL(req.url || '/', 'http://localhost:5173');
         const pathname = parsedUrl.pathname;
+
+        // Spark AI APIs
+        if (pathname.startsWith('/api/spark')) {
+          res.setHeader('Content-Type', 'application/json');
+          if (req.method === 'POST' && pathname === '/api/spark/action') {
+            let bodyStr = '';
+            req.on('data', (chunk) => { bodyStr += chunk; });
+            req.on('end', async () => {
+              try {
+                const body = JSON.parse(bodyStr || '{}');
+                const result = await handleSparkAction(body);
+                res.statusCode = result.status;
+                res.end(JSON.stringify(result.data));
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({
+                  success: false,
+                  action: 'hint',
+                  title: 'Internal Error',
+                  summary: 'Failed to process Spark AI request.',
+                  content: err?.message || 'Server error'
+                }));
+              }
+            });
+            return;
+          }
+        }
 
         // Code Execution APIs
         if (req.method === 'POST' && (pathname === '/api/code/run' || pathname === '/api/code/submit')) {

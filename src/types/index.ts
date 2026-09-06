@@ -858,4 +858,6 @@ export interface InterviewSessionConfig {
   scorePercentage?: number;
 }
 
+export * from './spark.ts';
+
 
