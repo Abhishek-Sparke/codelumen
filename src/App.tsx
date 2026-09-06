@@ -442,7 +442,6 @@ export function App() {
             onNavigateSection={(sec) => {
               navigate(sec === 'dashboard' ? '/admin' : (sec === 'rules' ? '/admin/discussions/rules' : `/admin/${sec}`));
             }}
-            onOpenAuth={() => handleOpenAuth('login', currentRoute.pathname)}
           />
         )}
 

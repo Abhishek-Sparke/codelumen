@@ -1,16 +1,14 @@
 import React from 'react';
-import { ShieldAlert, ArrowLeft, LogIn, Lock } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { Link } from '../../router/Link';
 
 interface AdminAccessDeniedProps {
   currentUser: UserProfile | null;
-  onOpenAuth?: () => void;
 }
 
 export const AdminAccessDenied: React.FC<AdminAccessDeniedProps> = ({
-  currentUser,
-  onOpenAuth
+  currentUser
 }) => {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
@@ -48,16 +46,6 @@ export const AdminAccessDenied: React.FC<AdminAccessDeniedProps> = ({
             <ArrowLeft className="h-4 w-4" />
             Return to Dashboard
           </Link>
-
-          {onOpenAuth && (
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black font-semibold transition-all text-sm shadow-lg shadow-amber-500/20"
-            >
-              <LogIn className="h-4 w-4" />
-              Switch to Admin Account
-            </button>
-          )}
         </div>
 
         <div className="mt-8 pt-6 border-t border-white/5 text-xs text-white/40">

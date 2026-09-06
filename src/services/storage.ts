@@ -40,7 +40,8 @@ const STORAGE_KEYS = {
   PLATFORM_REPORTS: 'codespark_platform_reports',
   DISCUSSION_RULES_REVISIONS: 'codespark_discussion_rules_revisions',
   PLATFORM_SETTINGS: 'codespark_platform_settings',
-  PROBLEM_LIFECYCLES: 'codespark_problem_lifecycles'
+  PROBLEM_LIFECYCLES: 'codespark_problem_lifecycles',
+  DB_MIGRATIONS: 'codespark_db_migrations'
 };
 
 
@@ -102,13 +103,36 @@ export const StorageService = {
   getCurrentUser(): UserProfile | null {
     if (typeof localStorage === 'undefined') return null;
     try {
+      this.applyDatabaseMigrations();
+
       const isAuth = localStorage.getItem(STORAGE_KEYS.AUTH_STATE);
       if (isAuth !== 'true') return null;
 
       const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (data) {
         const user = JSON.parse(data);
-        if (user && user.id) return user;
+        if (user && user.id) {
+          // ZERO-TRUST ROLE RESOLUTION:
+          // Cross-reference user against database/stored accounts authoritative role
+          // to prevent client-side localStorage role tampering (CASE 4).
+          const accounts = this.getAuthAccounts();
+          const authoritative = accounts.find(
+            a => a.id === user.id || (user.username && a.username.toLowerCase() === user.username.toLowerCase())
+          );
+          if (authoritative && authoritative.user) {
+            user.role = authoritative.user.role || 'user';
+          } else {
+            const canonicalSample = SAMPLE_USERS.find(
+              u => u.id === user.id || (user.username && u.username.toLowerCase() === user.username.toLowerCase())
+            );
+            if (canonicalSample) {
+              user.role = canonicalSample.role || 'user';
+            } else {
+              user.role = 'user';
+            }
+          }
+          return user;
+        }
       }
     } catch (e) {
       console.error('Error fetching current user:', e);
@@ -1819,6 +1843,104 @@ export const StorageService = {
       targetType: 'user',
       targetId: userId,
       details: `Updated account status for @${target.username} to '${newStatus}'.`
+    });
+
+    return { success: true };
+  },
+
+  /**
+   * Applies database migrations to stored accounts and platform data.
+   * Migration 005_assign_admin_role: Promotes @sparke to ADMIN role in database accounts.
+   */
+  applyDatabaseMigrations(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const rawApplied = localStorage.getItem(STORAGE_KEYS.DB_MIGRATIONS);
+      const applied: string[] = rawApplied ? JSON.parse(rawApplied) : [];
+
+      if (!applied.includes('005_assign_admin_role')) {
+        const accounts = this.getAuthAccounts();
+        const sparkeAccount = accounts.find(a => a.username.toLowerCase() === 'sparke');
+        if (sparkeAccount) {
+          sparkeAccount.user.role = 'admin';
+          if (sparkeAccount.profile) {
+            (sparkeAccount.profile as any).role = 'admin';
+          }
+          this.saveAuthAccounts(accounts);
+
+          // If sparke is current user, update session
+          const rawCurrent = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+          if (rawCurrent) {
+            try {
+              const currentObj = JSON.parse(rawCurrent);
+              if (currentObj && currentObj.username && currentObj.username.toLowerCase() === 'sparke') {
+                currentObj.role = 'admin';
+                localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentObj));
+              }
+            } catch {
+              // ignore json parse error
+            }
+          }
+
+          this.appendAuditLog({
+            actorId: 'migration-runner',
+            actorUsername: 'database_migration',
+            actorRole: 'admin',
+            action: 'DB_MIGRATION_APPLIED',
+            targetType: 'user',
+            targetId: sparkeAccount.id,
+            details: 'Applied database migration 005_assign_admin_role: Assigned @sparke the ADMIN role in account store.'
+          });
+
+          applied.push('005_assign_admin_role');
+          localStorage.setItem(STORAGE_KEYS.DB_MIGRATIONS, JSON.stringify(applied));
+        }
+      }
+    } catch (e) {
+      console.error('Database migration error:', e);
+    }
+  },
+
+  /**
+   * Safe programmatic administrative promotion mechanism through the database/auth role system.
+   */
+  promoteUser(username: string, newRole: AdminRole, actorUsername: string = 'system'): { success: boolean; error?: string } {
+    const clean = username.trim().toLowerCase();
+    const accounts = this.getAuthAccounts();
+    const account = accounts.find(a => a.username.toLowerCase() === clean);
+    if (!account) {
+      return { success: false, error: `Account @${username} not found in database.` };
+    }
+
+    const oldRole = account.user.role;
+    account.user.role = newRole;
+    if (account.profile) {
+      (account.profile as any).role = newRole;
+    }
+    this.saveAuthAccounts(accounts);
+
+    // If matching current user session, synchronize
+    const rawCurrent = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    if (rawCurrent) {
+      try {
+        const currentObj = JSON.parse(rawCurrent);
+        if (currentObj && currentObj.username && currentObj.username.toLowerCase() === clean) {
+          currentObj.role = newRole;
+          localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentObj));
+        }
+      } catch {
+        // ignore json parse error
+      }
+    }
+
+    this.appendAuditLog({
+      actorId: actorUsername,
+      actorUsername,
+      actorRole: 'admin',
+      action: 'USER_ROLE_PROMOTED',
+      targetType: 'user',
+      targetId: account.id,
+      details: `Assigned role '${newRole}' to @${account.username} (was '${oldRole}') through database authorization system.`
     });
 
     return { success: true };

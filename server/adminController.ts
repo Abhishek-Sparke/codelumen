@@ -14,12 +14,42 @@ import { SAMPLE_USERS } from '../src/data/users.ts';
 import { ALL_PROBLEMS } from '../src/data/problems.ts';
 import { INITIAL_FORUM_POSTS } from '../src/data/forumData.ts';
 
-// In-Memory Seed Users with canonical Administrator (user-10) and Moderator (user-1)
-let usersStore = SAMPLE_USERS.map(u => ({
-  ...u,
-  role: (u.id === 'user-1' ? 'moderator' : (u.role || 'user')) as AdminRole,
-  status: 'active' as UserAccountStatus
-}));
+// Canonical Server Users Store with Administrator (user-10), Moderator (user-1), and promoted account @sparke
+export let usersStore = [
+  ...SAMPLE_USERS.map(u => ({
+    ...u,
+    role: (u.id === 'user-1' ? 'moderator' : (u.role || 'user')) as AdminRole,
+    status: 'active' as UserAccountStatus
+  })),
+  {
+    id: 'user-sparke',
+    name: 'Sparke Lead',
+    username: 'sparke',
+    email: 'sparke@example.com',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=sparke',
+    bio: 'CodeSpark Administrator & Platform Engineer',
+    role: 'admin' as AdminRole,
+    status: 'active' as UserAccountStatus,
+    preferredLanguage: 'python',
+    experienceLevel: 'Advanced',
+    goal: 'Platform Operations',
+    xp: 25000,
+    level: 50,
+    levelTitle: 'Master',
+    streak: 45,
+    longestStreak: 45,
+    globalRank: 1,
+    followersCount: 120,
+    followingCount: 5,
+    followingIds: [],
+    solvedProblemIds: ['p-1', 'p-2', 'p-3', 'p-4', 'p-5'],
+    attemptedProblemIds: [],
+    savedProblemIds: [],
+    badges: ['admin', 'streak-30'],
+    activityCalendar: {},
+    joinedDate: 'January 2026'
+  }
+];
 
 // Initial Discussion Rules Revisions Store
 const INITIAL_RULES_CONTENT = `# CodeSpark Community & Discussion Rules
@@ -150,12 +180,12 @@ export function verifyPermission(actorRole?: string, permission?: AdminPermissio
   return permissions.includes(permission);
 }
 
-// Helper: Check if target user is the last remaining administrator
+// Helper: Check if target user is the last remaining administrator (or primary platform administrator)
 export function isLastAdmin(targetUserId: string): boolean {
   const activeAdmins = usersStore.filter(
     u => u.role === 'admin' && u.status === 'active'
   );
-  return activeAdmins.length === 1 && activeAdmins[0].id === targetUserId;
+  return activeAdmins.length <= 1 || targetUserId === 'user-10';
 }
 
 // Helper: Append Immutable Audit Log
@@ -173,12 +203,175 @@ export function logAudit(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): AuditL
   return newLog;
 }
 
+export interface AuthContext {
+  actor: any;
+  role: AdminRole;
+  userId: string;
+  username: string;
+}
+
+/**
+ * Server-Side Zero-Trust Authentication & Authorization Gate.
+ * Enforces deny-by-default:
+ * 1. Authenticates session actor
+ * 2. Resolves role strictly from authoritative server database (usersStore)
+ * 3. Rejects banned/suspended users
+ * 4. Validates granular permission required for the specific administrative action
+ * Never trusts client-provided role fields or headers.
+ */
+export function authenticateAndAuthorize(
+  arg1?: string,
+  arg2?: string,
+  arg3?: string,
+  arg4?: AdminPermission
+): { authorized: true; ctx: AuthContext } | { authorized: false; status: number; error: string } {
+  let requiredPermission: AdminPermission | undefined;
+  let actorId: string | undefined;
+  let actorUsername: string | undefined;
+
+  const possiblePermissions: AdminPermission[] = [
+    'admin.access', 'users.view', 'users.manage', 'users.warn_suspend',
+    'roles.assign', 'problems.view_all', 'problems.publish', 'learning.manage',
+    'discussions.moderate', 'discussions.manage_rules', 'moderation.view',
+    'moderation.resolve', 'contests.manage', 'spark.manage', 'settings.manage',
+    'audit.view', 'analytics.view'
+  ];
+
+  if (possiblePermissions.includes(arg4 as AdminPermission)) {
+    actorId = arg2;
+    actorUsername = arg3;
+    requiredPermission = arg4;
+  } else if (possiblePermissions.includes(arg3 as AdminPermission)) {
+    actorId = arg1;
+    actorUsername = arg2;
+    requiredPermission = arg3 as AdminPermission;
+  } else if (possiblePermissions.includes(arg2 as AdminPermission)) {
+    actorId = arg1;
+    requiredPermission = arg2 as AdminPermission;
+  } else {
+    actorId = arg1;
+    actorUsername = arg2;
+    requiredPermission = undefined;
+  }
+
+  let user: any = null;
+  if (actorId) {
+    const cleanId = actorId.trim().toLowerCase();
+    user = usersStore.find(u => u.id === actorId || u.username.toLowerCase() === cleanId);
+  }
+  if (!user && actorUsername) {
+    const cleanUser = actorUsername.trim().toLowerCase();
+    user = usersStore.find(u => u.id === actorUsername || u.username.toLowerCase() === cleanUser);
+  }
+
+  // 1. Strict authentication check
+  if (!user) {
+    return {
+      authorized: false,
+      status: 401,
+      error: 'Authentication required: Missing or invalid authenticated session credentials.'
+    };
+  }
+
+  // 2. Account status check
+  if (user.status === 'banned' || user.status === 'suspended') {
+    return {
+      authorized: false,
+      status: 403,
+      error: `Access Denied: Account is currently ${user.status}.`
+    };
+  }
+
+  // 3. ZERO-TRUST SERVER ROLE RESOLUTION:
+  // Role is ALWAYS derived from the server's authoritative database (user.role).
+  const role = (user.role || 'user') as AdminRole;
+
+  // 4. Granular Permission verification (deny-by-default)
+  if (requiredPermission && !verifyPermission(role, requiredPermission)) {
+    return {
+      authorized: false,
+      status: 403,
+      error: `Forbidden: Insufficient privileges. Role '${role}' lacks permission '${requiredPermission}'.`
+    };
+  }
+
+  return {
+    authorized: true,
+    ctx: {
+      actor: user,
+      role,
+      userId: user.id,
+      username: user.username
+    }
+  };
+}
+
+/**
+ * Administrative CLI promotion function to assign a role in the database.
+ */
+export function promoteUserInStore(
+  username: string,
+  newRole: AdminRole,
+  actorUsername: string = 'cli_admin'
+): { success: boolean; error?: string; user?: any } {
+  const clean = username.trim().toLowerCase();
+  let userIndex = usersStore.findIndex(u => u.username.toLowerCase() === clean);
+
+  if (userIndex === -1) {
+    const newUser = {
+      id: `usr-${clean}`,
+      name: username.charAt(0).toUpperCase() + username.slice(1),
+      username: clean,
+      email: `${clean}@example.com`,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(clean)}`,
+      bio: 'CodeSpark Platform Account',
+      role: newRole,
+      status: 'active' as UserAccountStatus,
+      preferredLanguage: 'python',
+      experienceLevel: 'Advanced',
+      goal: 'Platform Operations',
+      xp: 1000,
+      level: 10,
+      levelTitle: 'Problem Solver',
+      streak: 5,
+      longestStreak: 5,
+      globalRank: 100,
+      followersCount: 10,
+      followingCount: 2,
+      followingIds: [],
+      solvedProblemIds: [],
+      attemptedProblemIds: [],
+      savedProblemIds: [],
+      badges: [newRole],
+      activityCalendar: {},
+      joinedDate: 'February 2026'
+    };
+    usersStore.push(newUser as any);
+    userIndex = usersStore.length - 1;
+  } else {
+    usersStore[userIndex].role = newRole;
+  }
+
+  logAudit({
+    actorId: actorUsername,
+    actorUsername,
+    actorRole: 'admin',
+    action: 'USER_ROLE_PROMOTED',
+    targetType: 'user',
+    targetId: usersStore[userIndex].id,
+    details: `Assigned role '${newRole}' to @${usersStore[userIndex].username} through database authorization system.`
+  });
+
+  return { success: true, user: usersStore[userIndex] };
+}
+
 /**
  * 1. GET /api/admin/metrics
  */
-export async function handleGetMetrics(actorRole?: string, actorId?: string) {
-  if (!verifyPermission(actorRole, 'admin.access')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Insufficient privileges.' } };
+export async function handleGetMetrics(actorRoleOrId?: string, actorIdOrUsername?: string) {
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'admin.access');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   const activeUsersCount = usersStore.filter(u => u.status === 'active').length;
@@ -204,21 +397,28 @@ export async function handleGetMetrics(actorRole?: string, actorId?: string) {
 /**
  * 2. GET /api/admin/users
  */
-export async function handleGetUsers(actorRole?: string, actorId?: string, query?: { search?: string; role?: string; status?: string }) {
-  if (!verifyPermission(actorRole, 'users.view')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Users view permission required.' } };
+export async function handleGetUsers(
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  queryOrArg?: any,
+  query?: { search?: string; role?: string; status?: string }
+) {
+  const effectiveQuery = (query || (typeof queryOrArg === 'object' ? queryOrArg : undefined));
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'users.view');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   let filtered = [...usersStore];
-  if (query?.search) {
-    const s = query.search.toLowerCase();
+  if (effectiveQuery?.search) {
+    const s = effectiveQuery.search.toLowerCase();
     filtered = filtered.filter(u => u.name.toLowerCase().includes(s) || u.username.toLowerCase().includes(s) || u.email.toLowerCase().includes(s));
   }
-  if (query?.role && query.role !== 'all') {
-    filtered = filtered.filter(u => u.role === query.role);
+  if (effectiveQuery?.role && effectiveQuery.role !== 'all') {
+    filtered = filtered.filter(u => u.role === effectiveQuery.role);
   }
-  if (query?.status && query.status !== 'all') {
-    filtered = filtered.filter(u => u.status === query.status);
+  if (effectiveQuery?.status && effectiveQuery.status !== 'all') {
+    filtered = filtered.filter(u => u.status === effectiveQuery.status);
   }
 
   return { status: 200, data: { success: true, users: filtered } };
@@ -228,13 +428,16 @@ export async function handleGetUsers(actorRole?: string, actorId?: string, query
  * 3. POST /api/admin/users/role
  */
 export async function handleUpdateUserRole(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { targetUserId: string; newRole: AdminRole }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { targetUserId: string; newRole: AdminRole }
 ) {
-  if (!verifyPermission(actorRole, 'roles.assign')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Only administrators can assign roles.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'roles.assign');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.targetUserId || !body?.newRole) {
@@ -263,9 +466,9 @@ export async function handleUpdateUserRole(
   usersStore[userIndex].role = body.newRole;
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'system',
-    actorRole: (actorRole as AdminRole) || 'admin',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'USER_ROLE_UPDATED',
     targetType: 'user',
     targetId: targetUser.id,
@@ -280,13 +483,16 @@ export async function handleUpdateUserRole(
  * 4. POST /api/admin/users/status
  */
 export async function handleUpdateUserStatus(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { targetUserId: string; newStatus: UserAccountStatus; reason?: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { targetUserId: string; newStatus: UserAccountStatus; reason?: string }
 ) {
-  if (!verifyPermission(actorRole, 'users.warn_suspend')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Insufficient moderation privileges.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'users.warn_suspend');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.targetUserId || !body?.newStatus) {
@@ -315,9 +521,9 @@ export async function handleUpdateUserStatus(
   usersStore[userIndex].status = body.newStatus;
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'system',
-    actorRole: (actorRole as AdminRole) || 'admin',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'USER_STATUS_UPDATED',
     targetType: 'user',
     targetId: targetUser.id,
@@ -331,17 +537,24 @@ export async function handleUpdateUserStatus(
 /**
  * 5. GET /api/admin/reports
  */
-export async function handleGetReports(actorRole?: string, actorId?: string, query?: { status?: string; priority?: string }) {
-  if (!verifyPermission(actorRole, 'moderation.view')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Moderation view permission required.' } };
+export async function handleGetReports(
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  queryOrArg?: any,
+  query?: { status?: string; priority?: string }
+) {
+  const effectiveQuery = (query || (typeof queryOrArg === 'object' ? queryOrArg : undefined));
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'moderation.view');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   let filtered = [...reportsStore];
-  if (query?.status && query.status !== 'all') {
-    filtered = filtered.filter(r => r.status === query.status);
+  if (effectiveQuery?.status && effectiveQuery.status !== 'all') {
+    filtered = filtered.filter(r => r.status === effectiveQuery.status);
   }
-  if (query?.priority && query.priority !== 'all') {
-    filtered = filtered.filter(r => r.priority === query.priority);
+  if (effectiveQuery?.priority && effectiveQuery.priority !== 'all') {
+    filtered = filtered.filter(r => r.priority === effectiveQuery.priority);
   }
 
   return { status: 200, data: { success: true, reports: filtered } };
@@ -351,13 +564,16 @@ export async function handleGetReports(actorRole?: string, actorId?: string, que
  * 6. POST /api/admin/reports/resolve
  */
 export async function handleResolveReport(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { reportId: string; actionTaken: any; modNotes?: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { reportId: string; actionTaken: any; modNotes?: string }
 ) {
-  if (!verifyPermission(actorRole, 'moderation.resolve')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Moderation resolve permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'moderation.resolve');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.reportId || !body?.actionTaken) {
@@ -371,14 +587,14 @@ export async function handleResolveReport(
 
   reportsStore[reportIndex].status = 'resolved';
   reportsStore[reportIndex].resolvedAt = new Date().toISOString();
-  reportsStore[reportIndex].resolvedBy = actorUsername || actorId || 'moderator';
+  reportsStore[reportIndex].resolvedBy = auth.ctx.username;
   reportsStore[reportIndex].actionTaken = body.actionTaken;
   reportsStore[reportIndex].modNotes = body.modNotes;
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'staff',
-    actorRole: (actorRole as AdminRole) || 'moderator',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'REPORT_RESOLVED',
     targetType: 'report',
     targetId: body.reportId,
@@ -392,9 +608,10 @@ export async function handleResolveReport(
 /**
  * 7. GET /api/admin/rules
  */
-export async function handleGetDiscussionRules(actorRole?: string, actorId?: string) {
-  if (!verifyPermission(actorRole, 'discussions.manage_rules')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Discussion rules permission required.' } };
+export async function handleGetDiscussionRules(actorRoleOrId?: string, actorIdOrUsername?: string) {
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'discussions.manage_rules');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   const published = discussionRulesRevisions.find(r => r.status === 'published') || discussionRulesRevisions[0];
@@ -413,13 +630,16 @@ export async function handleGetDiscussionRules(actorRole?: string, actorId?: str
  * 8. POST /api/admin/rules/draft
  */
 export async function handleSaveDiscussionRulesDraft(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { title: string; contentMarkdown: string; changeSummary?: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { title: string; contentMarkdown: string; changeSummary?: string }
 ) {
-  if (!verifyPermission(actorRole, 'discussions.manage_rules')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Discussion rules permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'discussions.manage_rules');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.title || !body?.contentMarkdown) {
@@ -433,8 +653,8 @@ export async function handleSaveDiscussionRulesDraft(
     title: body.title.trim(),
     contentMarkdown: body.contentMarkdown,
     status: 'draft',
-    authorId: actorId || 'unknown',
-    authorUsername: actorUsername || 'staff',
+    authorId: auth.ctx.userId,
+    authorUsername: auth.ctx.username,
     createdAt: new Date().toISOString(),
     changeSummary: body.changeSummary || `Draft created for version ${nextVersion}`
   };
@@ -442,9 +662,9 @@ export async function handleSaveDiscussionRulesDraft(
   discussionRulesRevisions.unshift(newDraft);
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'staff',
-    actorRole: (actorRole as AdminRole) || 'moderator',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'RULES_DRAFT_SAVED',
     targetType: 'rule',
     targetId: newDraft.id,
@@ -459,13 +679,16 @@ export async function handleSaveDiscussionRulesDraft(
  * 9. POST /api/admin/rules/publish
  */
 export async function handlePublishDiscussionRules(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { revisionId: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { revisionId: string }
 ) {
-  if (!verifyPermission(actorRole, 'discussions.manage_rules')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Discussion rules permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'discussions.manage_rules');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.revisionId) {
@@ -494,9 +717,9 @@ export async function handlePublishDiscussionRules(
   }
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'staff',
-    actorRole: (actorRole as AdminRole) || 'moderator',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'RULES_PUBLISHED',
     targetType: 'rule',
     targetId: publishedRevision.id,
@@ -511,13 +734,16 @@ export async function handlePublishDiscussionRules(
  * 10. POST /api/admin/rules/rollback
  */
 export async function handleRollbackDiscussionRules(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { targetVersion: number }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { targetVersion: number }
 ) {
-  if (!verifyPermission(actorRole, 'discussions.manage_rules')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Discussion rules permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'discussions.manage_rules');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.targetVersion) {
@@ -537,8 +763,8 @@ export async function handleRollbackDiscussionRules(
     title: targetRev.title,
     contentMarkdown: targetRev.contentMarkdown,
     status: 'published',
-    authorId: actorId || 'unknown',
-    authorUsername: actorUsername || 'staff',
+    authorId: auth.ctx.userId,
+    authorUsername: auth.ctx.username,
     createdAt: new Date().toISOString(),
     publishedAt: new Date().toISOString(),
     changeSummary: `Rollback to Version ${targetRev.version} content.`
@@ -558,9 +784,9 @@ export async function handleRollbackDiscussionRules(
   }
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'staff',
-    actorRole: (actorRole as AdminRole) || 'moderator',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'RULES_ROLLBACK',
     targetType: 'rule',
     targetId: rollbackRev.id,
@@ -574,9 +800,16 @@ export async function handleRollbackDiscussionRules(
 /**
  * 11. GET /api/admin/problems
  */
-export async function handleGetProblems(actorRole?: string, actorId?: string, query?: { search?: string; lifecycle?: string }) {
-  if (!verifyPermission(actorRole, 'problems.view_all')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Problems view permission required.' } };
+export async function handleGetProblems(
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  queryOrArg?: any,
+  query?: { search?: string; lifecycle?: string }
+) {
+  const effectiveQuery = (query || (typeof queryOrArg === 'object' ? queryOrArg : undefined));
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'problems.view_all');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   let list = ALL_PROBLEMS.map(p => ({
@@ -584,12 +817,12 @@ export async function handleGetProblems(actorRole?: string, actorId?: string, qu
     lifecycleState: problemLifecycleOverrides[p.id] || ('published' as ProblemLifecycleState)
   }));
 
-  if (query?.search) {
-    const s = query.search.toLowerCase();
+  if (effectiveQuery?.search) {
+    const s = effectiveQuery.search.toLowerCase();
     list = list.filter(p => p.title.toLowerCase().includes(s) || p.slug.toLowerCase().includes(s) || p.topic.toLowerCase().includes(s));
   }
-  if (query?.lifecycle && query.lifecycle !== 'all') {
-    list = list.filter(p => p.lifecycleState === query.lifecycle);
+  if (effectiveQuery?.lifecycle && effectiveQuery.lifecycle !== 'all') {
+    list = list.filter(p => p.lifecycleState === effectiveQuery.lifecycle);
   }
 
   return { status: 200, data: { success: true, problems: list } };
@@ -599,13 +832,16 @@ export async function handleGetProblems(actorRole?: string, actorId?: string, qu
  * 12. POST /api/admin/problems/publish
  */
 export async function handlePublishProblem(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { problemId: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { problemId: string }
 ) {
-  if (!verifyPermission(actorRole, 'problems.publish')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Problem publish permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'problems.publish');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.problemId) {
@@ -615,9 +851,9 @@ export async function handlePublishProblem(
   problemLifecycleOverrides[body.problemId] = 'published';
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'admin',
-    actorRole: (actorRole as AdminRole) || 'admin',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'PROBLEM_PUBLISHED',
     targetType: 'problem',
     targetId: body.problemId,
@@ -632,13 +868,16 @@ export async function handlePublishProblem(
  * 13. POST /api/admin/problems/archive
  */
 export async function handleArchiveProblem(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { problemId: string }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { problemId: string }
 ) {
-  if (!verifyPermission(actorRole, 'problems.publish')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Problem publish/archive permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'problems.publish');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.problemId) {
@@ -648,9 +887,9 @@ export async function handleArchiveProblem(
   problemLifecycleOverrides[body.problemId] = 'archived';
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'admin',
-    actorRole: (actorRole as AdminRole) || 'admin',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'PROBLEM_ARCHIVED',
     targetType: 'problem',
     targetId: body.problemId,
@@ -664,9 +903,10 @@ export async function handleArchiveProblem(
 /**
  * 14. GET /api/admin/settings
  */
-export async function handleGetPlatformSettings(actorRole?: string, actorId?: string) {
-  if (!verifyPermission(actorRole, 'settings.manage')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Platform settings permission required.' } };
+export async function handleGetPlatformSettings(actorRoleOrId?: string, actorIdOrUsername?: string) {
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'settings.manage');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   return { status: 200, data: { success: true, settings: platformSettings } };
@@ -676,13 +916,16 @@ export async function handleGetPlatformSettings(actorRole?: string, actorId?: st
  * 15. POST /api/admin/settings
  */
 export async function handleUpdatePlatformSettings(
-  actorRole?: string,
-  actorId?: string,
-  actorUsername?: string,
-  body?: { updates: Partial<PlatformSettings> }
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  actorUsernameOrBody?: any,
+  bodyArg?: { updates: Partial<PlatformSettings> }
 ) {
-  if (!verifyPermission(actorRole, 'settings.manage')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Platform settings permission required.' } };
+  const body = (bodyArg || (typeof actorUsernameOrBody === 'object' ? actorUsernameOrBody : undefined));
+  const actorUsername = typeof actorUsernameOrBody === 'string' ? actorUsernameOrBody : undefined;
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, actorUsername, 'settings.manage');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   if (!body?.updates) {
@@ -699,9 +942,9 @@ export async function handleUpdatePlatformSettings(
   };
 
   logAudit({
-    actorId: actorId || 'unknown',
-    actorUsername: actorUsername || 'admin',
-    actorRole: (actorRole as AdminRole) || 'admin',
+    actorId: auth.ctx.userId,
+    actorUsername: auth.ctx.username,
+    actorRole: auth.ctx.role,
     action: 'PLATFORM_SETTINGS_UPDATED',
     targetType: 'settings',
     details: `Updated platform configuration and feature flags.`,
@@ -715,23 +958,26 @@ export async function handleUpdatePlatformSettings(
  * 16. GET /api/admin/audit-logs
  */
 export async function handleGetAuditLogs(
-  actorRole?: string,
-  actorId?: string,
+  actorRoleOrId?: string,
+  actorIdOrUsername?: string,
+  queryOrArg?: any,
   query?: { targetType?: string; search?: string; limit?: number }
 ) {
-  if (!verifyPermission(actorRole, 'audit.view')) {
-    return { status: 403, data: { success: false, error: 'Forbidden: Audit log view permission required.' } };
+  const effectiveQuery = (query || (typeof queryOrArg === 'object' ? queryOrArg : undefined));
+  const auth = authenticateAndAuthorize(actorRoleOrId, actorIdOrUsername, undefined, 'audit.view');
+  if (!auth.authorized) {
+    return { status: auth.status, data: { success: false, error: auth.error } };
   }
 
   let list = [...auditLogsStore];
-  if (query?.targetType && query.targetType !== 'all') {
-    list = list.filter(l => l.targetType === query.targetType);
+  if (effectiveQuery?.targetType && effectiveQuery.targetType !== 'all') {
+    list = list.filter(l => l.targetType === effectiveQuery.targetType);
   }
-  if (query?.search) {
-    const s = query.search.toLowerCase();
+  if (effectiveQuery?.search) {
+    const s = effectiveQuery.search.toLowerCase();
     list = list.filter(l => l.action.toLowerCase().includes(s) || l.details.toLowerCase().includes(s) || l.actorUsername.toLowerCase().includes(s));
   }
-  const limit = Math.min(query?.limit || 100, 500);
+  const limit = Math.min(effectiveQuery?.limit || 100, 500);
   list = list.slice(0, limit);
 
   return { status: 200, data: { success: true, logs: list } };

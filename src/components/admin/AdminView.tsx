@@ -9,15 +9,13 @@ interface AdminViewProps {
   activeSection?: string;
   onNavigateProblem: (problemId: string) => void;
   onNavigateSection?: (section: string) => void;
-  onOpenAuth?: () => void;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
   currentUser,
   activeSection = 'dashboard',
   onNavigateProblem,
-  onNavigateSection,
-  onOpenAuth
+  onNavigateSection
 }) => {
   // ZERO-TRUST ACCESS GATE:
   // If user is not authenticated or does not possess at least 'moderator' or 'admin' role,
@@ -26,7 +24,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
     return (
       <AdminAccessDenied
         currentUser={currentUser}
-        onOpenAuth={onOpenAuth}
       />
     );
   }

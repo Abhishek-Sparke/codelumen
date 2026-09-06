@@ -45,13 +45,15 @@ function codesparkApiPlugin(): Plugin {
         // Admin & Moderation APIs: /api/admin/*
         if (pathname.startsWith('/api/admin')) {
           res.setHeader('Content-Type', 'application/json');
-          const actorRole = (req.headers['x-user-role'] as string) || parsedUrl.searchParams.get('role') || 'user';
+          // ZERO-TRUST SERVER AUTHORIZATION:
+          // Never trust client-provided role headers or parameters.
+          // Role and permissions are resolved strictly from the server/database user store.
           const actorId = (req.headers['x-user-id'] as string) || parsedUrl.searchParams.get('userId') || '';
           const actorUsername = (req.headers['x-user-username'] as string) || parsedUrl.searchParams.get('username') || '';
 
           if (req.method === 'GET') {
             if (pathname === '/api/admin/metrics') {
-              const resObj = await handleGetMetrics(actorRole, actorId);
+              const resObj = await handleGetMetrics(actorId, actorUsername);
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
@@ -60,7 +62,7 @@ function codesparkApiPlugin(): Plugin {
               const search = parsedUrl.searchParams.get('search') || undefined;
               const role = parsedUrl.searchParams.get('roleFilter') || undefined;
               const status = parsedUrl.searchParams.get('statusFilter') || undefined;
-              const resObj = await handleGetUsers(actorRole, actorId, { search, role, status });
+              const resObj = await handleGetUsers(actorId, actorUsername, { search, role, status });
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
@@ -68,13 +70,13 @@ function codesparkApiPlugin(): Plugin {
             if (pathname === '/api/admin/reports') {
               const status = parsedUrl.searchParams.get('status') || undefined;
               const priority = parsedUrl.searchParams.get('priority') || undefined;
-              const resObj = await handleGetReports(actorRole, actorId, { status, priority });
+              const resObj = await handleGetReports(actorId, actorUsername, { status, priority });
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
             }
             if (pathname === '/api/admin/rules') {
-              const resObj = await handleGetDiscussionRules(actorRole, actorId);
+              const resObj = await handleGetDiscussionRules(actorId, actorUsername);
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
@@ -82,13 +84,13 @@ function codesparkApiPlugin(): Plugin {
             if (pathname === '/api/admin/problems') {
               const search = parsedUrl.searchParams.get('search') || undefined;
               const lifecycle = parsedUrl.searchParams.get('lifecycle') || undefined;
-              const resObj = await handleGetProblems(actorRole, actorId, { search, lifecycle });
+              const resObj = await handleGetProblems(actorId, actorUsername, { search, lifecycle });
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
             }
             if (pathname === '/api/admin/settings') {
-              const resObj = await handleGetPlatformSettings(actorRole, actorId);
+              const resObj = await handleGetPlatformSettings(actorId, actorUsername);
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
@@ -97,7 +99,7 @@ function codesparkApiPlugin(): Plugin {
               const targetType = parsedUrl.searchParams.get('targetType') || undefined;
               const search = parsedUrl.searchParams.get('search') || undefined;
               const limit = parsedUrl.searchParams.get('limit') ? parseInt(parsedUrl.searchParams.get('limit')!, 10) : undefined;
-              const resObj = await handleGetAuditLogs(actorRole, actorId, { targetType, search, limit });
+              const resObj = await handleGetAuditLogs(actorId, actorUsername, { targetType, search, limit });
               res.statusCode = resObj.status;
               res.end(JSON.stringify(resObj.data));
               return;
@@ -110,60 +112,59 @@ function codesparkApiPlugin(): Plugin {
             req.on('end', async () => {
               try {
                 const body = JSON.parse(bodyStr || '{}');
-                const role = body.actorRole || actorRole;
-                const id = body.actorId || actorId;
-                const username = body.actorUsername || actorUsername;
+                const id = actorId || body.actorId;
+                const username = actorUsername || body.actorUsername;
 
                 if (pathname === '/api/admin/users/role') {
-                  const resObj = await handleUpdateUserRole(role, id, username, body);
+                  const resObj = await handleUpdateUserRole(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/users/status') {
-                  const resObj = await handleUpdateUserStatus(role, id, username, body);
+                  const resObj = await handleUpdateUserStatus(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/reports/resolve') {
-                  const resObj = await handleResolveReport(role, id, username, body);
+                  const resObj = await handleResolveReport(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/rules/draft') {
-                  const resObj = await handleSaveDiscussionRulesDraft(role, id, username, body);
+                  const resObj = await handleSaveDiscussionRulesDraft(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/rules/publish') {
-                  const resObj = await handlePublishDiscussionRules(role, id, username, body);
+                  const resObj = await handlePublishDiscussionRules(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/rules/rollback') {
-                  const resObj = await handleRollbackDiscussionRules(role, id, username, body);
+                  const resObj = await handleRollbackDiscussionRules(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/problems/publish') {
-                  const resObj = await handlePublishProblem(role, id, username, body);
+                  const resObj = await handlePublishProblem(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/problems/archive') {
-                  const resObj = await handleArchiveProblem(role, id, username, body);
+                  const resObj = await handleArchiveProblem(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
                 }
                 if (pathname === '/api/admin/settings') {
-                  const resObj = await handleUpdatePlatformSettings(role, id, username, body);
+                  const resObj = await handleUpdatePlatformSettings(id, username, body);
                   res.statusCode = resObj.status;
                   res.end(JSON.stringify(resObj.data));
                   return;
