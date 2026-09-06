@@ -2,7 +2,7 @@ import {
   ForumSection, ForumCategory, DiscussionPost, DiscussionComment, 
   ForumReactionType, ForumAuthor, PaginatedDiscussionsResult 
 } from '../types';
-import { FORUM_SECTIONS, FORUM_CATEGORIES, INITIAL_FORUM_POSTS } from '../data/forumData';
+import { FORUM_SECTIONS, FORUM_CATEGORIES, INITIAL_FORUM_POSTS, DISCUSSION_RULES_THREAD } from '../data/forumData';
 import { StorageService } from './storage';
 import { SecuritySanitizer } from './securitySanitizer';
 
@@ -27,7 +27,15 @@ export class ForumService {
     try {
       const stored = localStorage.getItem(FORUM_STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        const parsed: DiscussionPost[] = JSON.parse(stored);
+        // Guarantee system discussion rules thread is present
+        if (!parsed.some(t => t.system_type === 'discussion_rules' || t.id === 'discussion-rules')) {
+          parsed.unshift(DISCUSSION_RULES_THREAD);
+          try {
+            localStorage.setItem(FORUM_STORAGE_KEY, JSON.stringify(parsed));
+          } catch {}
+        }
+        return parsed;
       }
       localStorage.setItem(FORUM_STORAGE_KEY, JSON.stringify(INITIAL_FORUM_POSTS));
       return INITIAL_FORUM_POSTS;
@@ -185,10 +193,18 @@ export class ForumService {
     incrementView: boolean = true
   ): DiscussionPost | undefined {
     const threads = this.loadStoredThreads();
-    const thread = threads.find(t => t.id === idOrSlug || t.slug === idOrSlug);
+    const normalized = (idOrSlug || '').toLowerCase().trim();
+    const isRulesQuery = normalized === 'rules' || normalized === 'discussion-rules' || normalized === 'server-and-forum-rules';
+
+    const thread = threads.find(t => 
+      t.id === idOrSlug || 
+      t.slug === idOrSlug || 
+      (isRulesQuery && (t.system_type === 'discussion_rules' || t.id === 'discussion-rules' || t.slug === 'discussion-rules'))
+    ) || (isRulesQuery ? DISCUSSION_RULES_THREAD : undefined);
+
     if (!thread) return undefined;
 
-    if (incrementView) {
+    if (incrementView && !thread.is_system_discussion) {
       try {
         const key = currentUserId ? `${VIEWED_THREADS_KEY}_${currentUserId}` : `${VIEWED_THREADS_KEY}_anon`;
         const rawViewed = sessionStorage.getItem(key);
@@ -214,6 +230,29 @@ export class ForumService {
    */
   public static getThreadById(id: string): DiscussionPost | undefined {
     return this.getThreadByIdOrSlug(id, undefined, false);
+  }
+
+  /**
+   * Architecture for future Admin / Moderator content management of Discussion Rules.
+   * Strictly enforces role authorization (Admin or Moderator only).
+   */
+  public static updateDiscussionRules(
+    content: string,
+    isPublished: boolean,
+    userRole?: string
+  ): { success: boolean; error?: string } {
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return { success: false, error: 'Unauthorized: Only admins and moderators can manage discussion rules.' };
+    }
+    const threads = this.loadStoredThreads();
+    const rulesIndex = threads.findIndex(t => t.system_type === 'discussion_rules' || t.id === 'discussion-rules');
+    if (rulesIndex >= 0) {
+      threads[rulesIndex].content = isPublished ? content : '';
+      threads[rulesIndex].lastActivityAt = new Date().toISOString();
+      this.saveThreads(threads);
+      return { success: true };
+    }
+    return { success: false, error: 'Discussion rules record not found.' };
   }
 
   /**

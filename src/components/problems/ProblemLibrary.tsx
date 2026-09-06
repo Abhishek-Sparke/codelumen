@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   Search, CheckCircle2, Bookmark, BookmarkCheck, 
-  X, Sparkles, Clock, RefreshCw, Layers, Compass
+  X, Sparkles, Clock, RefreshCw, Layers, Compass,
+  Shuffle, ArrowUpDown, ChevronDown, Circle, Minus,
+  RotateCcw, Filter, Eye
 } from 'lucide-react';
 import { Problem, UserProfile } from '../../types';
 import { ProblemDatabase } from '../../services/problemDatabase';
@@ -13,6 +15,19 @@ interface ProblemLibraryProps {
   onToggleSave: (problemId: string) => void;
 }
 
+type StatusTab = 'all' | 'unsolved' | 'solved' | 'attempted' | 'saved' | 'revisit';
+type SortOption = 'default' | 'difficulty-asc' | 'difficulty-desc' | 'acceptance' | 'newest' | 'title-asc' | 'progress';
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'default', label: 'Default Order' },
+  { value: 'difficulty-asc', label: 'Difficulty ↑' },
+  { value: 'difficulty-desc', label: 'Difficulty ↓' },
+  { value: 'acceptance', label: 'Acceptance Rate' },
+  { value: 'newest', label: 'Newest First' },
+  { value: 'title-asc', label: 'Title A–Z' },
+  { value: 'progress', label: 'My Progress' },
+];
+
 export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
   currentUser,
   initialFilter = 'all',
@@ -21,75 +36,143 @@ export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
 }) => {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'unsolved' | 'solved' | 'attempted' | 'saved'>(
+  const [activeTab, setActiveTab] = useState<StatusTab>(
     initialFilter === 'saved' ? 'saved' : 'all'
   );
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [topicFilter, setTopicFilter] = useState<string>('all');
   const [patternFilter, setPatternFilter] = useState<string>('all');
-  const [estimatedTimeFilter, setEstimatedTimeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('default');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
-  // Debounce search input (Section 7)
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Debounce search
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchInput);
+      setPage(1);
     }, 200);
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  const topics = useMemo(() => ProblemDatabase.getTopics(), []);
-  const patterns = useMemo(() => ProblemDatabase.getPatterns(), []);
+  // Keyboard shortcut: '/' to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-  // Fetch problems via ProblemDatabase query engine (Section 2, 4, 7)
-  const { problems: allFilteredProblems } = useMemo(() => {
-    return ProblemDatabase.getProblems({
+  const topics = useMemo(() => ProblemDatabase.getUniqueTopics(), []);
+  const patterns = useMemo(() => ProblemDatabase.getUniquePatterns(), []);
+  const problemCounts = useMemo(() => ProblemDatabase.getProblemCounts(), []);
+  const userSolveCounts = useMemo(
+    () => ProblemDatabase.getUserSolveCounts(currentUser.id), 
+    [currentUser.id, currentUser.solvedProblemIds.length]
+  );
+
+  // Fetch and filter problems
+  const { filteredProblems, totalCount } = useMemo(() => {
+    const result = ProblemDatabase.getProblems({
       search: debouncedSearch,
       difficulty: difficultyFilter,
       topic: topicFilter,
       pattern: patternFilter,
-      status: activeTab,
+      status: activeTab === 'revisit' ? 'all' : activeTab,
       userId: currentUser.id
     });
-  }, [debouncedSearch, difficultyFilter, topicFilter, patternFilter, activeTab, currentUser.id]);
 
-  // Apply estimated time filter if selected
+    let problems = result.problems;
+
+    // Handle revisit tab
+    if (activeTab === 'revisit') {
+      const revisitIds = new Set(currentUser.revisitProblemIds || []);
+      problems = problems.filter(p => revisitIds.has(p.id));
+    }
+
+    // Apply sorting
+    if (sortBy !== 'default') {
+      problems = ProblemDatabase.sortProblems(problems, sortBy);
+    }
+
+    return { filteredProblems: problems, totalCount: problems.length };
+  }, [debouncedSearch, difficultyFilter, topicFilter, patternFilter, activeTab, sortBy, currentUser.id, currentUser.solvedProblemIds.length, currentUser.revisitProblemIds]);
+
+  // Paginate
   const displayedProblems = useMemo(() => {
-    if (estimatedTimeFilter === 'all') return allFilteredProblems;
-    return allFilteredProblems.filter(p => {
-      const minutes = parseInt(p.estimatedTime || '15', 10);
-      if (estimatedTimeFilter === 'quick') return minutes <= 15;
-      if (estimatedTimeFilter === 'standard') return minutes > 15 && minutes <= 25;
-      if (estimatedTimeFilter === 'deep') return minutes > 25;
-      return true;
-    });
-  }, [allFilteredProblems, estimatedTimeFilter]);
+    const start = (page - 1) * pageSize;
+    return filteredProblems.slice(start, start + pageSize);
+  }, [filteredProblems, page]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const hasActiveFilters = 
     difficultyFilter !== 'all' || 
     topicFilter !== 'all' || 
     patternFilter !== 'all' || 
-    estimatedTimeFilter !== 'all' || 
     debouncedSearch.length > 0;
 
   const resetFilters = () => {
     setDifficultyFilter('all');
     setTopicFilter('all');
     setPatternFilter('all');
-    setEstimatedTimeFilter('all');
     setSearchInput('');
     setDebouncedSearch('');
     setActiveTab('all');
+    setSortBy('default');
+    setPage(1);
   };
 
-  // Counts from authenticated user records
-  const totalSolved = currentUser.solvedProblemIds.length;
-  const totalAttempted = currentUser.attemptedProblemIds.length;
-  const totalSaved = currentUser.savedProblemIds.length;
+  const handleRandomProblem = useCallback(() => {
+    const problem = ProblemDatabase.getRandomProblem({
+      userId: currentUser.id,
+      difficulty: difficultyFilter !== 'all' ? difficultyFilter : undefined,
+      topic: topicFilter !== 'all' ? topicFilter : undefined,
+      pattern: patternFilter !== 'all' ? patternFilter : undefined,
+    });
+    if (problem) onNavigate('workspace', problem.id);
+  }, [currentUser.id, difficultyFilter, topicFilter, patternFilter, onNavigate]);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'solved': return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
+      case 'attempted': return <Minus className="h-4 w-4 text-amber-400" />;
+      default: return <Circle className="h-4 w-4 text-white/20" />;
+    }
+  };
+
+  const getDifficultyStyle = (diff: string) => {
+    switch (diff) {
+      case 'Easy': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+      case 'Medium': return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+      case 'Hard': return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+      default: return 'text-white/50 bg-white/5 border-white/10';
+    }
+  };
+
+  const statusTabs: { id: StatusTab; label: string; count?: number }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'unsolved', label: 'Unsolved' },
+    { id: 'solved', label: 'Solved', count: currentUser.solvedProblemIds.length },
+    { id: 'attempted', label: 'Attempted', count: currentUser.attemptedProblemIds.length },
+    { id: 'saved', label: 'Saved', count: currentUser.savedProblemIds.length },
+    { id: 'revisit', label: 'Review', count: (currentUser.revisitProblemIds || []).length },
+  ];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8 animate-in fade-in duration-200">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-6 animate-in fade-in duration-200">
       
-      {/* SECTION 4: PAGE HEADING & SUPPORTING TEXT */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-400">
@@ -99,295 +182,326 @@ export const ProblemLibrary: React.FC<ProblemLibraryProps> = ({
           <h1 className="mt-2.5 font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
             Practice Problems
           </h1>
-          <p className="mt-1 text-sm text-white/50">
-            Build your problem-solving skills one challenge at a time.
+          <p className="mt-1 text-xs sm:text-sm text-white/50 max-w-2xl leading-relaxed">
+            Master algorithms and data structures through structured practice. {problemCounts.total} problems across {topics.length} topics.
           </p>
         </div>
 
-        {/* Quick Stats Pill */}
-        <div className="flex items-center gap-3 text-xs text-white/60">
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-2">
-            <span className="font-semibold text-emerald-400">{totalSolved}</span> Solved
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-2">
-            <span className="font-semibold text-amber-400">{totalAttempted}</span> Attempted
-          </div>
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-2">
-            <span className="font-semibold text-cyan-400">{totalSaved}</span> Saved
+        {/* Solve Stats */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-5 py-3">
+            <div className="text-center">
+              <span className="block text-lg font-bold text-emerald-400">{userSolveCounts.easy}</span>
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">Easy</span>
+            </div>
+            <div className="h-6 w-px bg-white/[0.08]" />
+            <div className="text-center">
+              <span className="block text-lg font-bold text-amber-400">{userSolveCounts.medium}</span>
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">Med</span>
+            </div>
+            <div className="h-6 w-px bg-white/[0.08]" />
+            <div className="text-center">
+              <span className="block text-lg font-bold text-rose-400">{userSolveCounts.hard}</span>
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">Hard</span>
+            </div>
+            <div className="h-6 w-px bg-white/[0.08]" />
+            <div className="text-center">
+              <span className="block text-lg font-bold text-white">{userSolveCounts.total}</span>
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">Total</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* SEARCH AND MULTI-AXIS FILTERS BAR */}
-      <div className="glass-panel rounded-3xl p-5 border border-white/[0.08] space-y-4 shadow-xl">
-        
-        {/* Section 4 & 7: Top Search Input */}
-        <div className="relative">
-          <Search className="absolute left-4 top-3.5 h-4 w-4 text-white/40" />
+      {/* Status Tabs */}
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+        {statusTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setActiveTab(tab.id); setPage(1); }}
+            className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
+              activeTab === tab.id
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.04] border border-transparent'
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && tab.count > 0 && (
+              <span className="ml-1.5 text-[10px] opacity-70">({tab.count})</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Search + Sort + Filter + Random */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* Search Bar */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
           <input
+            ref={searchRef}
             type="text"
+            placeholder="Search problems by title, topic, or pattern... ( / )"
+            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] pl-10 pr-10 py-2.5 text-sm text-white placeholder-white/30 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-colors"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search problems, patterns, topics..."
-            className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] pl-11 pr-10 py-3 text-xs text-white placeholder:text-white/30 focus:border-amber-400/50 focus:outline-none focus:ring-1 focus:ring-amber-400/30"
+            onChange={e => setSearchInput(e.target.value)}
           />
           {searchInput && (
             <button
               onClick={() => { setSearchInput(''); setDebouncedSearch(''); }}
-              className="absolute right-3.5 top-3.5 text-white/40 hover:text-white"
-              aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        {/* Filters Row */}
-        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-          
-          {/* Difficulty Filter (Section 6) */}
-          <select
-            value={difficultyFilter}
-            onChange={(e) => setDifficultyFilter(e.target.value)}
-            className="rounded-xl border border-white/[0.08] bg-[#14141b] px-3 py-2 text-xs text-white/80 focus:outline-none focus:border-amber-400/50"
-            aria-label="Filter by Difficulty"
+        {/* Sort Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSortDropdown(!showSortDropdown)}
+            className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-xs font-medium text-white/70 hover:bg-white/[0.06] transition-colors"
           >
-            <option value="all">Difficulty: All</option>
-            <option value="Easy">Easy</option>
-            <option value="Medium">Medium</option>
-            <option value="Hard">Hard</option>
-          </select>
-
-          {/* Topic Filter */}
-          <select
-            value={topicFilter}
-            onChange={(e) => setTopicFilter(e.target.value)}
-            className="rounded-xl border border-white/[0.08] bg-[#14141b] px-3 py-2 text-xs text-white/80 focus:outline-none focus:border-amber-400/50"
-            aria-label="Filter by Topic"
-          >
-            <option value="all">Topic: All</option>
-            {topics.map(t => (
-              <option key={t.id} value={t.name}>{t.name}</option>
-            ))}
-          </select>
-
-          {/* Pattern Filter */}
-          <select
-            value={patternFilter}
-            onChange={(e) => setPatternFilter(e.target.value)}
-            className="rounded-xl border border-white/[0.08] bg-[#14141b] px-3 py-2 text-xs text-white/80 focus:outline-none focus:border-amber-400/50"
-            aria-label="Filter by Pattern"
-          >
-            <option value="all">Pattern: All</option>
-            {patterns.map(p => (
-              <option key={p.id} value={p.name}>{p.name}</option>
-            ))}
-          </select>
-
-          {/* Estimated Time Filter */}
-          <select
-            value={estimatedTimeFilter}
-            onChange={(e) => setEstimatedTimeFilter(e.target.value)}
-            className="rounded-xl border border-white/[0.08] bg-[#14141b] px-3 py-2 text-xs text-white/80 focus:outline-none focus:border-amber-400/50"
-            aria-label="Filter by Estimated Time"
-          >
-            <option value="all">Time: All</option>
-            <option value="quick">Quick (≤ 15 min)</option>
-            <option value="standard">Standard (15–25 min)</option>
-            <option value="deep">Deep (&gt; 25 min)</option>
-          </select>
-
-          {hasActiveFilters && (
-            <button
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs text-amber-400 font-medium hover:bg-amber-400/10 transition-colors"
-            >
-              <RefreshCw className="h-3 w-3" />
-              <span>Reset filters</span>
-            </button>
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort'}</span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          {showSortDropdown && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowSortDropdown(false)} />
+              <div className="absolute right-0 top-full mt-1 z-40 w-48 rounded-xl border border-white/[0.1] bg-[#12121a] shadow-2xl py-1">
+                {SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setSortBy(opt.value); setShowSortDropdown(false); }}
+                    className={`w-full text-left px-4 py-2 text-xs transition-colors ${
+                      sortBy === opt.value ? 'text-amber-400 bg-amber-500/10' : 'text-white/70 hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
-
         </div>
 
+        {/* Filter Toggle */}
+        <button
+          onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${
+            showFiltersPanel || hasActiveFilters
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+              : 'border-white/[0.08] bg-white/[0.03] text-white/70 hover:bg-white/[0.06]'
+          }`}
+        >
+          <Filter className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Filters</span>
+          {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
+        </button>
+
+        {/* Random Problem */}
+        <button
+          onClick={handleRandomProblem}
+          className="flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/15 transition-colors"
+        >
+          <Shuffle className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Random</span>
+        </button>
       </div>
 
-      {/* SECTION 4: TABS (All, Unsolved, Solved, Attempted, Saved) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-3">
-        <div className="flex items-center gap-1.5">
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'unsolved', label: 'Unsolved' },
-            { id: 'solved', label: `Solved (${totalSolved})` },
-            { id: 'attempted', label: `Attempted (${totalAttempted})` },
-            { id: 'saved', label: `Saved (${totalSaved})` },
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
+      {/* Expandable Filters Panel */}
+      {showFiltersPanel && (
+        <div className="flex flex-wrap gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 animate-in slide-in-from-top-2 duration-150">
+          {/* Difficulty */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Difficulty</label>
+            <select
+              value={difficultyFilter}
+              onChange={e => { setDifficultyFilter(e.target.value); setPage(1); }}
+              className="rounded-lg border border-white/[0.1] bg-[#0e0e14] px-3 py-1.5 text-xs text-white/80 focus:outline-none focus:border-amber-500/40"
+            >
+              <option value="all">All</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+
+          {/* Topic */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Topic</label>
+            <select
+              value={topicFilter}
+              onChange={e => { setTopicFilter(e.target.value); setPage(1); }}
+              className="rounded-lg border border-white/[0.1] bg-[#0e0e14] px-3 py-1.5 text-xs text-white/80 focus:outline-none focus:border-amber-500/40"
+            >
+              <option value="all">All Topics</option>
+              {topics.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          {/* Pattern */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Pattern</label>
+            <select
+              value={patternFilter}
+              onChange={e => { setPatternFilter(e.target.value); setPage(1); }}
+              className="rounded-lg border border-white/[0.1] bg-[#0e0e14] px-3 py-1.5 text-xs text-white/80 focus:outline-none focus:border-amber-500/40"
+            >
+              <option value="all">All Patterns</option>
+              {patterns.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <div className="flex items-end">
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[10px] font-semibold text-white/50 hover:text-white/80 transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Clear All
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between text-xs text-white/40">
+        <span>
+          Showing {displayedProblems.length} of {totalCount} problem{totalCount !== 1 ? 's' : ''}
+          {hasActiveFilters && (
+            <button onClick={resetFilters} className="ml-2 text-amber-400 hover:text-amber-300">
+              Clear filters
+            </button>
+          )}
+        </span>
+        {totalPages > 1 && (
+          <span>Page {page} of {totalPages}</span>
+        )}
+      </div>
+
+      {/* Problem Table */}
+      <div className="rounded-2xl border border-white/[0.06] overflow-hidden">
+        {/* Table Header */}
+        <div className="grid grid-cols-[40px_1fr_auto_auto_auto_40px] sm:grid-cols-[40px_1fr_100px_100px_90px_80px_40px] items-center gap-2 px-4 py-3 bg-white/[0.02] border-b border-white/[0.06] text-[10px] font-semibold text-white/40 uppercase tracking-wider">
+          <span className="text-center">#</span>
+          <span>Title</span>
+          <span className="hidden sm:block">Topic</span>
+          <span className="hidden sm:block">Pattern</span>
+          <span className="text-center">Difficulty</span>
+          <span className="hidden sm:block text-center">Accept</span>
+          <span className="text-center">
+            <Bookmark className="h-3 w-3 mx-auto" />
+          </span>
+        </div>
+
+        {/* Problem Rows */}
+        {displayedProblems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-white/30 space-y-3">
+            <Compass className="h-10 w-10 text-white/15" />
+            <p className="text-sm">No problems match your filters</p>
+            <button onClick={resetFilters} className="text-xs text-amber-400 hover:text-amber-300">Reset filters</button>
+          </div>
+        ) : (
+          displayedProblems.map((problem, idx) => {
+            const isSaved = currentUser.savedProblemIds.includes(problem.id);
+            const globalIdx = (page - 1) * pageSize + idx + 1;
+            return (
+              <div
+                key={problem.id}
+                className="grid grid-cols-[40px_1fr_auto_auto_auto_40px] sm:grid-cols-[40px_1fr_100px_100px_90px_80px_40px] items-center gap-2 px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                onClick={() => onNavigate('workspace', problem.id)}
+              >
+                {/* Status Icon */}
+                <div className="flex items-center justify-center">
+                  {getStatusIcon(problem.userStatus)}
+                </div>
+
+                {/* Title */}
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-white group-hover:text-amber-300 transition-colors truncate block">
+                    {problem.title}
+                  </span>
+                </div>
+
+                {/* Topic */}
+                <span className="hidden sm:block text-[11px] text-white/40 truncate">
+                  {problem.topic}
+                </span>
+
+                {/* Pattern */}
+                <span className="hidden sm:block text-[11px] text-white/30 truncate">
+                  {problem.pattern}
+                </span>
+
+                {/* Difficulty Badge */}
+                <div className="flex justify-center">
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getDifficultyStyle(problem.difficulty)}`}>
+                    {problem.difficulty}
+                  </span>
+                </div>
+
+                {/* Acceptance */}
+                <span className="hidden sm:block text-center text-[11px] text-white/40 font-mono">
+                  {problem.acceptance}
+                </span>
+
+                {/* Bookmark */}
+                <button
+                  onClick={e => { e.stopPropagation(); onToggleSave(problem.id); }}
+                  className="flex items-center justify-center text-white/20 hover:text-amber-400 transition-colors"
+                >
+                  {isSaved ? (
+                    <BookmarkCheck className="h-4 w-4 text-amber-400" />
+                  ) : (
+                    <Bookmark className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/60 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Previous
+          </button>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            const pageNum = page <= 3 ? i + 1 : page + i - 2;
+            if (pageNum < 1 || pageNum > totalPages) return null;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wide transition-all ${
-                  isActive
-                    ? 'bg-white/10 text-white font-semibold shadow-sm ring-1 ring-white/10'
-                    : 'text-white/50 hover:bg-white/[0.04] hover:text-white'
+                key={pageNum}
+                onClick={() => setPage(pageNum)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  page === pageNum
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'border border-white/[0.08] bg-white/[0.03] text-white/60 hover:bg-white/[0.06]'
                 }`}
               >
-                {tab.label}
+                {pageNum}
               </button>
             );
           })}
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/60 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+          </button>
         </div>
-
-        <span className="text-xs text-white/40 font-mono">
-          Showing {displayedProblems.length} challenges
-        </span>
-      </div>
-
-      {/* SECTION 5: PROBLEM LIST UI */}
-      <div className="glass-panel overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0b0b10]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            
-            {/* Table Header */}
-            <thead className="border-b border-white/[0.08] bg-[#0e0e14] text-[11px] font-semibold text-white/50 uppercase tracking-wider">
-              <tr>
-                <th className="py-3.5 pl-6 pr-2 w-14 text-center">Status</th>
-                <th className="py-3.5 px-4">Problem</th>
-                <th className="py-3.5 px-4">Difficulty</th>
-                <th className="py-3.5 px-4">Topics</th>
-                <th className="py-3.5 px-4">Pattern</th>
-                <th className="py-3.5 px-4">Est. Time</th>
-                <th className="py-3.5 pr-6 pl-2 w-16 text-center">Save</th>
-              </tr>
-            </thead>
-
-            {/* Table Body */}
-            <tbody className="divide-y divide-white/[0.04]">
-              {displayedProblems.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center">
-                    <div className="mx-auto max-w-sm space-y-3">
-                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-white/[0.04] text-white/40">
-                        <Search className="h-5 w-5" />
-                      </div>
-                      <p className="text-sm font-semibold text-white/80">No problems match your search.</p>
-                      <p className="text-xs text-white/40">Try a different search or clear your current filters.</p>
-                      {hasActiveFilters && (
-                        <button
-                          onClick={resetFilters}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] border border-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/[0.1] transition-colors"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          <span>Reset all filters</span>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                displayedProblems.map((problem) => {
-                  const isSolved = problem.userStatus === 'solved';
-                  const isAttempted = problem.userStatus === 'attempted';
-                  const isSaved = problem.isSaved;
-
-                  return (
-                    <tr
-                      key={problem.id}
-                      onClick={() => onNavigate('workspace', problem.id)}
-                      className="group cursor-pointer transition-colors hover:bg-white/[0.04]"
-                    >
-                      {/* Section 5: Status indicators (✓ Solved, ◐ Attempted, ○ Unsolved) */}
-                      <td className="py-4 pl-6 pr-2 text-center" onClick={(e) => e.stopPropagation()}>
-                        {isSolved ? (
-                          <span className="inline-flex items-center justify-center text-emerald-400 font-bold" title="Solved">
-                            ✓
-                          </span>
-                        ) : isAttempted ? (
-                          <span className="inline-flex items-center justify-center text-amber-400 font-bold text-sm" title="Attempted">
-                            ◐
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center justify-center text-white/20" title="Unsolved">
-                            ○
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Problem Title */}
-                      <td className="py-4 px-4">
-                        <span className="font-semibold text-white group-hover:text-amber-300 transition-colors">
-                          {problem.title}
-                        </span>
-                        {problem.slug && (
-                          <span className="block text-[11px] font-mono text-white/30 mt-0.5">
-                            {problem.slug}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Section 6: Difficulty System (Subtle, dark, not overpowering) */}
-                      <td className="py-4 px-4">
-                        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium tracking-wide ${
-                          problem.difficulty === 'Easy'
-                            ? 'bg-emerald-500/10 text-emerald-300/90 border border-emerald-500/20'
-                            : problem.difficulty === 'Medium'
-                            ? 'bg-amber-500/10 text-amber-300/90 border border-amber-500/20'
-                            : 'bg-rose-500/10 text-rose-300/90 border border-rose-500/20'
-                        }`}>
-                          {problem.difficulty}
-                        </span>
-                      </td>
-
-                      {/* Topics */}
-                      <td className="py-4 px-4 text-white/70">
-                        {problem.topic}
-                      </td>
-
-                      {/* Pattern */}
-                      <td className="py-4 px-4">
-                        <span className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-2 py-1 text-[11px] text-white/80 font-medium">
-                          {problem.pattern}
-                        </span>
-                      </td>
-
-                      {/* Estimated Time */}
-                      <td className="py-4 px-4 text-white/50 font-mono text-[11px]">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 text-white/30" />
-                          <span>{problem.estimatedTime}</span>
-                        </div>
-                      </td>
-
-                      {/* Bookmark / Saved Action */}
-                      <td 
-                        className="py-4 pr-6 pl-2 text-center" 
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
-                          onToggleSave(problem.id); 
-                        }}
-                      >
-                        <button 
-                          className="p-1.5 rounded-lg text-white/30 hover:text-amber-400 hover:bg-white/[0.04] transition-colors"
-                          title={isSaved ? "Remove from saved" : "Save problem"}
-                          aria-label={isSaved ? "Saved" : "Save"}
-                        >
-                          {isSaved ? (
-                            <BookmarkCheck className="h-4 w-4 text-amber-400" />
-                          ) : (
-                            <Bookmark className="h-4 w-4" />
-                          )}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-
-          </table>
-        </div>
-      </div>
-
+      )}
     </div>
   );
 };

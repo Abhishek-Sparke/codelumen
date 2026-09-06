@@ -309,7 +309,40 @@ export const FORUM_SECTIONS: ForumSection[] = [
   }
 ];
 
+export const DISCUSSION_RULES_THREAD: DiscussionPost = {
+  id: 'discussion-rules',
+  slug: 'discussion-rules',
+  title: 'Discussion Rules',
+  categoryId: 'cat-general',
+  categoryName: 'General Discussion',
+  sectionId: 'community',
+  author: {
+    id: 'codespark-admin',
+    name: 'CodeSpark Community Team',
+    username: 'codespark',
+    avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
+    role: 'Admin',
+    joinedDate: 'Jan 2026',
+    postCount: 1,
+    xp: 99999,
+    problemsSolved: 500
+  },
+  content: '',
+  tags: ['Official', 'Rules'],
+  likes: 0,
+  commentsCount: 0,
+  views: 120,
+  createdAt: 'Official',
+  lastActivityAt: 'Official',
+  isPinned: true,
+  isLocked: true,
+  comments: [],
+  is_system_discussion: true,
+  system_type: 'discussion_rules'
+};
+
 export const INITIAL_FORUM_POSTS: DiscussionPost[] = [
+  DISCUSSION_RULES_THREAD,
   {
     id: 'disc-1',
     slug: 'visualizing-monotonic-stack',

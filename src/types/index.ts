@@ -73,6 +73,12 @@ export interface UserProfile {
   weeklyTarget?: number; // target problems per week (e.g. 3, 5, 7, 10)
   preferences?: UserPreferences;
   onboardingProgress?: OnboardingProgress;
+  // Phase 5 Competitive Fields
+  contestRating?: number;
+  peakContestRating?: number;
+  contestCount?: number;
+  bestContestRank?: number;
+  revisitProblemIds?: string[];
 }
 
 export interface UserProfileRecord {
@@ -341,6 +347,8 @@ export interface DiscussionPost {
   watchedByUserIds?: string[];
   bookmarkedByUserIds?: string[];
   comments: DiscussionComment[];
+  is_system_discussion?: boolean;
+  system_type?: 'discussion_rules' | string;
 }
 
 export interface DiscussionFilterParams {
@@ -699,4 +707,155 @@ export interface CodeSubmitResponse {
     topic: string;
   };
 }
+
+// =============================================================================
+// PHASE 5 COMPETITIVE CODING & PRACTICE TYPES
+// =============================================================================
+
+export interface StudyPlanProblem {
+  problemId: string;
+  title: string;
+  slug: string;
+  difficulty: Difficulty;
+  topic: string;
+  pattern: string;
+  estimatedMinutes: number;
+  isCompleted?: boolean;
+}
+
+export interface StudyPlanSection {
+  id: string;
+  title: string;
+  description: string;
+  position: number;
+  problems: StudyPlanProblem[];
+  isCompleted?: boolean;
+  completionPercentage?: number;
+}
+
+export interface StudyPlan {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
+  estimatedDuration: string;
+  totalProblems: number;
+  badgeIcon: string;
+  sections: StudyPlanSection[];
+  isEnrolled?: boolean;
+  status?: 'not_started' | 'active' | 'paused' | 'completed';
+  completedProblemsCount?: number;
+  completionPercentage?: number;
+  currentSectionTitle?: string;
+  nextProblem?: StudyPlanProblem;
+}
+
+export interface UserStudyPlanProgress {
+  userId: string;
+  studyPlanId: string;
+  status: 'active' | 'paused' | 'completed';
+  enrolledAt: string;
+  completedAt?: string;
+  lastPracticedAt: string;
+}
+
+export interface PersonalProblemList {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  isPublic: boolean;
+  problemIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  solvedCount?: number;
+}
+
+export interface UserProblemReview {
+  id: string;
+  userId: string;
+  problemId: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface DailyChallenge {
+  id: string;
+  date: string; // 'YYYY-MM-DD'
+  problemId: string;
+  problem?: Problem;
+  bonusXp: number;
+  status?: 'not_started' | 'attempted' | 'solved';
+  isSolvedToday?: boolean;
+}
+
+export interface ContestProblemConfig {
+  problemId: string;
+  problem?: Problem;
+  scorePoints: number;
+  orderIndex: number;
+}
+
+export interface ContestRankingItem {
+  userId: string;
+  username: string;
+  avatar: string;
+  rank: number;
+  score: number;
+  solvedCount: number;
+  penaltyMinutes: number;
+  lastAcceptedAt?: string;
+  ratingChange?: number;
+  newRating?: number;
+  problemStatuses: Record<string, {
+    solved: boolean;
+    attempts: number;
+    timeMinutes?: number;
+  }>;
+}
+
+export interface ContestRatingHistoryItem {
+  contestId: string;
+  contestTitle: string;
+  date: string;
+  rank: number;
+  participantsCount: number;
+  score: number;
+  solvedCount: number;
+  previousRating: number;
+  ratingChange: number;
+  newRating: number;
+}
+
+export interface AchievementItem {
+  id: string;
+  title: string;
+  description: string;
+  category: 'solve' | 'streak' | 'contest' | 'study_plan' | 'pattern';
+  iconName: string;
+  badgePoints: number;
+  unlockedAt?: string;
+  isUnlocked?: boolean;
+  progress?: number;
+  maxProgress?: number;
+}
+
+export interface InterviewSessionConfig {
+  id: string;
+  durationMinutes: 15 | 30 | 45 | 60;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Mixed';
+  problemIds: string[];
+  startedAt: string;
+  endedAt?: string;
+  solvedProblemIds: string[];
+  selfEvaluation?: {
+    communication: number; // 1-5
+    optimality: number;    // 1-5
+    codeQuality: number;   // 1-5
+    notes?: string;
+  };
+  scorePercentage?: number;
+}
+
 

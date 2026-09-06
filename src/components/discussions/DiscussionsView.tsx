@@ -180,10 +180,17 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
     setSelectedThreadId(threadIdOrSlug);
     setViewMode('thread-detail');
     setPostsPage(1);
+    try {
+      window.history.pushState(null, '', `/discussions/${threadIdOrSlug}`);
+    } catch {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBackToCategory = () => {
+    if (activeThread?.is_system_discussion) {
+      handleBackToAll();
+      return;
+    }
     if (activeThread?.categoryId) {
       setSelectedCategoryId(activeThread.categoryId);
       setViewMode('category-threads');
@@ -195,7 +202,11 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
 
   const handleBackToAll = () => {
     setSelectedCategoryId('all');
+    setSelectedThreadId(null);
     setViewMode('categories');
+    try {
+      window.history.pushState(null, '', '/discussions');
+    } catch {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -742,6 +753,41 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
           </div>
         </div>
 
+        {/* TOP FORUM ENTRY: Discussion Rules (Clickable top forum row with link icon) */}
+        {viewMode !== 'thread-detail' && (
+          <div
+            onClick={() => handleSelectThread('discussion-rules')}
+            className="group mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#0c0c12] px-4 py-3 sm:py-3.5 hover:border-amber-400/40 hover:bg-white/[0.02] transition-all cursor-pointer shadow-md active:scale-[0.99]"
+            role="button"
+            tabIndex={0}
+            aria-label="Discussion Rules"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 border border-amber-400/20 text-amber-400 group-hover:scale-105 transition-all">
+                <LinkIcon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white group-hover:text-amber-400 transition-colors truncate">
+                    Discussion Rules
+                  </h3>
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-white/[0.06] text-white/50 border border-white/10 hidden sm:inline-block">
+                    Official
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/40 truncate">
+                  CodeSpark community guidelines and forum conduct standards
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0 text-white/40 group-hover:text-amber-400 transition-colors ml-2">
+              <LinkIcon className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4 text-white/30 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
+            </div>
+          </div>
+        )}
+
         {/* ========================================================================= */}
         {/* VIEW 1: FORUM CATEGORIES LIST (4 HIERARCHICAL SECTIONS)                    */}
         {/* ========================================================================= */}
@@ -1089,13 +1135,17 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                 >
                   Discussions
                 </button>
-                <ChevronRight className="h-3 w-3" />
-                <button 
-                  onClick={handleBackToCategory}
-                  className="hover:text-white transition-colors truncate max-w-[120px]"
-                >
-                  {activeThread.categoryName || 'Category'}
-                </button>
+                {!activeThread.is_system_discussion && (
+                  <>
+                    <ChevronRight className="h-3 w-3" />
+                    <button 
+                      onClick={handleBackToCategory}
+                      className="hover:text-white transition-colors truncate max-w-[120px]"
+                    >
+                      {activeThread.categoryName || 'Category'}
+                    </button>
+                  </>
+                )}
                 <ChevronRight className="h-3 w-3" />
                 <span className="text-amber-400 font-medium truncate max-w-[200px]">
                   {activeThread.title}
@@ -1103,11 +1153,11 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
               </div>
 
               <button
-                onClick={handleBackToCategory}
+                onClick={activeThread.is_system_discussion ? handleBackToAll : handleBackToCategory}
                 className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Back to threads</span>
+                <span>{activeThread.is_system_discussion ? 'Back to discussions' : 'Back to threads'}</span>
               </button>
             </div>
 
@@ -1119,7 +1169,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                 <div className="space-y-2 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="rounded-md bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/80">
-                      {activeThread.categoryName}
+                      {activeThread.is_system_discussion ? 'Official Guidelines' : activeThread.categoryName}
                     </span>
                     {activeThread.isPinned && (
                       <span className="rounded-md bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-400 flex items-center gap-1">
@@ -1128,7 +1178,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                     )}
                     {activeThread.isLocked && (
                       <span className="rounded-md bg-red-500/20 border border-red-500/30 px-2 py-0.5 text-[11px] font-semibold text-red-400 flex items-center gap-1">
-                        <Lock className="h-3 w-3" /> Locked
+                        <Lock className="h-3 w-3" /> {activeThread.is_system_discussion ? 'Read-only' : 'Locked'}
                       </span>
                     )}
                     {activeThread.isSolved && (
@@ -1148,54 +1198,62 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                     <span>{activeThread.createdAt}</span>
                     <span>·</span>
                     <span>{activeThread.views || 1} views</span>
-                    <span>·</span>
-                    <span>{(activeThread.comments?.length || 0) + 1} total posts</span>
+                    {!activeThread.is_system_discussion && (
+                      <>
+                        <span>·</span>
+                        <span>{(activeThread.comments?.length || 0) + 1} total posts</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 {/* Thread Controls */}
                 <div className="flex items-center gap-2 self-start md:self-center shrink-0">
-                  <button
-                    onClick={handleToggleWatch}
-                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                      currentUser && activeThread.watchedByUserIds?.includes(currentUser.id)
-                        ? 'border-blue-500/40 bg-blue-500/10 text-blue-400'
-                        : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    {currentUser && activeThread.watchedByUserIds?.includes(currentUser.id) ? (
-                      <>
-                        <Bell className="h-3.5 w-3.5 fill-blue-400" />
-                        <span>Watching</span>
-                      </>
-                    ) : (
-                      <>
-                        <Bell className="h-3.5 w-3.5" />
-                        <span>Watch</span>
-                      </>
-                    )}
-                  </button>
+                  {!activeThread.is_system_discussion && (
+                    <>
+                      <button
+                        onClick={handleToggleWatch}
+                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          currentUser && activeThread.watchedByUserIds?.includes(currentUser.id)
+                            ? 'border-blue-500/40 bg-blue-500/10 text-blue-400'
+                            : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        {currentUser && activeThread.watchedByUserIds?.includes(currentUser.id) ? (
+                          <>
+                            <Bell className="h-3.5 w-3.5 fill-blue-400" />
+                            <span>Watching</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bell className="h-3.5 w-3.5" />
+                            <span>Watch</span>
+                          </>
+                        )}
+                      </button>
 
-                  <button
-                    onClick={handleToggleBookmark}
-                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                      currentUser && activeThread.bookmarkedByUserIds?.includes(currentUser.id)
-                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
-                        : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    {currentUser && activeThread.bookmarkedByUserIds?.includes(currentUser.id) ? (
-                      <>
-                        <BookmarkCheck className="h-3.5 w-3.5 text-amber-400" />
-                        <span>Saved</span>
-                      </>
-                    ) : (
-                      <>
-                        <Bookmark className="h-3.5 w-3.5" />
-                        <span>Save</span>
-                      </>
-                    )}
-                  </button>
+                      <button
+                        onClick={handleToggleBookmark}
+                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          currentUser && activeThread.bookmarkedByUserIds?.includes(currentUser.id)
+                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+                            : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        {currentUser && activeThread.bookmarkedByUserIds?.includes(currentUser.id) ? (
+                          <>
+                            <BookmarkCheck className="h-3.5 w-3.5 text-amber-400" />
+                            <span>Saved</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark className="h-3.5 w-3.5" />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
 
                   <button
                     onClick={handleShare}
@@ -1205,8 +1263,8 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                     <span>Share</span>
                   </button>
 
-                  {/* Moderator Controls Dropdown */}
-                  {isUserModerator && (
+                  {/* Moderator Controls Dropdown (for regular threads only) */}
+                  {!activeThread.is_system_discussion && isUserModerator && (
                     <div className="relative">
                       <button
                         onClick={() => setIsModeratorMenuOpen(prev => !prev)}
@@ -1347,40 +1405,63 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                       </div>
 
                       {/* Post Formatted Content */}
-                      {renderFormattedContent(activeThread.content)}
+                      {activeThread.content && activeThread.content.trim().length > 0 ? (
+                        renderFormattedContent(activeThread.content)
+                      ) : activeThread.is_system_discussion ? (
+                        <div className="py-12 px-6 text-center rounded-xl border border-white/[0.06] bg-white/[0.02] space-y-3 my-2">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-400 mx-auto">
+                            <LinkIcon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-base font-semibold text-white">Discussion rules have not been published yet.</h4>
+                            <p className="text-xs text-white/40 mt-1 max-w-md mx-auto">
+                              Official community guidelines and forum conduct standards will appear here once published by platform administrators.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        renderFormattedContent(activeThread.content)
+                      )}
                     </div>
 
                     {/* Post Bottom Actions & Reactions */}
                     <div className="mt-6 border-t border-white/[0.06] pt-4 flex flex-wrap items-center justify-between gap-3">
-                      {/* Reactions Bar */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {(['like', 'love', 'helpful', 'great'] as ForumReactionType[]).map(type => {
-                          const count = activeThread.reactions?.[type]?.length || 0;
-                          const hasReacted = currentUser && activeThread.reactions?.[type]?.includes(currentUser.id);
-                          const emoji = type === 'like' ? '👍' : type === 'love' ? '❤️' : type === 'helpful' ? '💡' : '🔥';
-                          const label = type === 'like' ? 'Like' : type === 'love' ? 'Love' : type === 'helpful' ? 'Helpful' : 'Great';
+                      {activeThread.is_system_discussion ? (
+                        <div className="flex items-center gap-2 text-xs text-white/40">
+                          <Shield className="h-3.5 w-3.5 text-amber-400/80" />
+                          <span>Official Platform Guidelines</span>
+                        </div>
+                      ) : (
+                        /* Reactions Bar */
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(['like', 'love', 'helpful', 'great'] as ForumReactionType[]).map(type => {
+                            const count = activeThread.reactions?.[type]?.length || 0;
+                            const hasReacted = currentUser && activeThread.reactions?.[type]?.includes(currentUser.id);
+                            const emoji = type === 'like' ? '👍' : type === 'love' ? '❤️' : type === 'helpful' ? '💡' : '🔥';
+                            const label = type === 'like' ? 'Like' : type === 'love' ? 'Love' : type === 'helpful' ? 'Helpful' : 'Great';
 
-                          return (
-                            <button
-                              key={type}
-                              onClick={() => handleToggleReaction(activeThread.id, type)}
-                              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-all cursor-pointer ${
-                                hasReacted
-                                  ? 'border-amber-400/50 bg-amber-400/15 text-amber-300 font-semibold'
-                                  : 'border-white/[0.08] bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]'
-                              }`}
-                            >
-                              <span>{emoji}</span>
-                              <span>{label}</span>
-                              {count > 0 && <span className="text-[11px] opacity-80">({count})</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
+                            return (
+                              <button
+                                key={type}
+                                onClick={() => handleToggleReaction(activeThread.id, type)}
+                                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-all cursor-pointer ${
+                                  hasReacted
+                                    ? 'border-amber-400/50 bg-amber-400/15 text-amber-300 font-semibold'
+                                    : 'border-white/[0.08] bg-white/[0.02] text-white/60 hover:text-white hover:bg-white/[0.06]'
+                                }`}
+                              >
+                                <span>{emoji}</span>
+                                <span>{label}</span>
+                                {count > 0 && <span className="text-[11px] opacity-80">({count})</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Post Action Buttons */}
                       <div className="flex items-center gap-2 text-xs text-white/50">
-                        {!activeThread.isLocked && (
+                        {!activeThread.is_system_discussion && !activeThread.isLocked && (
                           <button
                             onClick={() => handleQuotePost(1, activeThread.author.username, activeThread.content)}
                             className="hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
@@ -1396,13 +1477,15 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
                           <Share2 className="h-3.5 w-3.5" />
                           <span>Share</span>
                         </button>
-                        <button
-                          onClick={() => setReportingPost({ id: activeThread.id, type: 'thread' })}
-                          className="hover:text-red-400 transition-colors flex items-center gap-1 cursor-pointer"
-                        >
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          <span>Report</span>
-                        </button>
+                        {!activeThread.is_system_discussion && (
+                          <button
+                            onClick={() => setReportingPost({ id: activeThread.id, type: 'thread' })}
+                            className="hover:text-red-400 transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>Report</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1410,7 +1493,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
               </div>
 
               {/* 2. REPLIES (#2, #3...) */}
-              {paginatedComments.map(comment => {
+              {!activeThread.is_system_discussion && paginatedComments.map(comment => {
                 const isAccepted = comment.isAcceptedAnswer || activeThread.acceptedPostId === comment.id;
                 const canAccept = currentUser && (currentUser.id === activeThread.author.id || isUserModerator);
 
@@ -1584,7 +1667,7 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
             </div>
 
             {/* Posts Pagination (20 posts per page) */}
-            {totalPostPages > 1 && (
+            {!activeThread.is_system_discussion && totalPostPages > 1 && (
               <div className="flex items-center justify-between border-t border-white/[0.08] pt-4 text-xs">
                 <span className="text-white/40">
                   Posts Page {postsPage} of {totalPostPages}
@@ -1624,7 +1707,12 @@ export const DiscussionsView: React.FC<DiscussionsViewProps> = ({
             {/* ===================================================================== */}
             {/* REPLY BOX & RICH TEXT EDITOR                                          */}
             {/* ===================================================================== */}
-            {activeThread.isLocked ? (
+            {activeThread.is_system_discussion ? (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#0c0c12] p-5 text-center text-xs text-white/40 flex items-center justify-center gap-2">
+                <Lock className="h-4 w-4 text-white/30" />
+                <span>Discussion Rules is an official read-only document. Replies and user submissions are disabled.</span>
+              </div>
+            ) : activeThread.isLocked ? (
               <div className="rounded-2xl border border-red-500/20 bg-[#0c0c12] p-6 text-center text-xs text-red-300">
                 <Lock className="mx-auto h-6 w-6 text-red-400 mb-2" />
                 <p className="font-semibold">This discussion has been locked by a moderator.</p>

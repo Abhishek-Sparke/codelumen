@@ -3,7 +3,8 @@ import {
   UserProfileRecord, UserPreferencesRecord, UserProgressRecord, OnboardingProgressRecord,
   UserProblemProgressRecord, SavedProblemRecord, SubmissionRecord, SubmissionDraftRecord,
   XpTransactionRecord, UserActivityRecord, SupportedLanguage,
-  ExecutionJobRecord
+  ExecutionJobRecord, PersonalProblemList, UserStudyPlanProgress,
+  DailyChallenge, ContestRatingHistoryItem, AchievementItem, InterviewSessionConfig
 } from '../types';
 import { SAMPLE_DISCUSSIONS } from '../data/discussions';
 import { calculateLevel } from '../data/badges';
@@ -22,8 +23,18 @@ const STORAGE_KEYS = {
   SUBMISSION_DRAFTS: 'codespark_submission_drafts',
   XP_TRANSACTIONS: 'codespark_xp_transactions',
   USER_ACTIVITY: 'codespark_user_activity',
-  EXECUTION_JOBS: 'codespark_execution_jobs'
+  EXECUTION_JOBS: 'codespark_execution_jobs',
+  // Phase 5 Keys
+  REVISIT_PROBLEMS: 'codespark_revisit_problems',
+  PERSONAL_LISTS: 'codespark_personal_lists',
+  USER_STUDY_PLANS: 'codespark_user_study_plans',
+  DAILY_CHALLENGES: 'codespark_daily_challenges',
+  USER_ACHIEVEMENTS: 'codespark_user_achievements',
+  CONTEST_REGISTRATIONS: 'codespark_contest_registrations',
+  CONTEST_RATINGS: 'codespark_contest_ratings',
+  INTERVIEW_SESSIONS: 'codespark_interview_sessions'
 };
+
 
 export interface EditorSettings {
   fontSize: number;
@@ -1108,5 +1119,297 @@ export const StorageService = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  // ===========================================================================
+  // PHASE 5: REVISIT QUEUE (SECTION 19)
+  // ===========================================================================
+  getRevisitProblemIds(userId: string): string[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.REVISIT_PROBLEMS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error reading revisit queue:', e);
+    }
+    return [];
+  },
+
+  toggleRevisitProblem(userId: string, problemId: string): boolean {
+    const list = this.getRevisitProblemIds(userId);
+    const exists = list.includes(problemId);
+    const updated = exists ? list.filter(id => id !== problemId) : [...list, problemId];
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.REVISIT_PROBLEMS}_${userId}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) {
+      user.revisitProblemIds = updated;
+      this.saveCurrentUser(user);
+    }
+    return !exists;
+  },
+
+  // ===========================================================================
+  // PHASE 5: PERSONAL PROBLEM LISTS (SECTION 20)
+  // ===========================================================================
+  getPersonalLists(userId: string): PersonalProblemList[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.PERSONAL_LISTS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching personal lists:', e);
+    }
+    // Return default starter list if empty
+    const defaultList: PersonalProblemList = {
+      id: `list_${userId}_fav`,
+      userId,
+      title: 'Interview Core Practice',
+      description: 'Handpicked high-frequency technical interview questions',
+      isPublic: false,
+      problemIds: ['p-1', 'p-9', 'p-14', 'p-20', 'p-24', 'p-29'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    return [defaultList];
+  },
+
+  savePersonalList(list: PersonalProblemList): void {
+    try {
+      const lists = this.getPersonalLists(list.userId);
+      const idx = lists.findIndex(l => l.id === list.id);
+      if (idx !== -1) {
+        lists[idx] = { ...list, updatedAt: new Date().toISOString() };
+      } else {
+        lists.unshift(list);
+      }
+      localStorage.setItem(`${STORAGE_KEYS.PERSONAL_LISTS}_${list.userId}`, JSON.stringify(lists));
+    } catch (e) {
+      console.error('Error saving personal list:', e);
+    }
+  },
+
+  deletePersonalList(userId: string, listId: string): boolean {
+    try {
+      const lists = this.getPersonalLists(userId).filter(l => l.id !== listId);
+      localStorage.setItem(`${STORAGE_KEYS.PERSONAL_LISTS}_${userId}`, JSON.stringify(lists));
+      return true;
+    } catch (e) {
+      console.error('Error deleting personal list:', e);
+      return false;
+    }
+  },
+
+  addProblemToList(userId: string, listId: string, problemId: string): boolean {
+    const lists = this.getPersonalLists(userId);
+    const target = lists.find(l => l.id === listId);
+    if (!target) return false;
+    if (!target.problemIds.includes(problemId)) {
+      target.problemIds.push(problemId);
+      this.savePersonalList(target);
+    }
+    return true;
+  },
+
+  removeProblemFromList(userId: string, listId: string, problemId: string): boolean {
+    const lists = this.getPersonalLists(userId);
+    const target = lists.find(l => l.id === listId);
+    if (!target) return false;
+    target.problemIds = target.problemIds.filter(id => id !== problemId);
+    this.savePersonalList(target);
+    return true;
+  },
+
+  // ===========================================================================
+  // PHASE 5: USER STUDY PLANS (SECTIONS 13, 14)
+  // ===========================================================================
+  getUserStudyPlans(userId: string): Record<string, UserStudyPlanProgress> {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.USER_STUDY_PLANS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching user study plans:', e);
+    }
+    return {};
+  },
+
+  saveUserStudyPlanProgress(progress: UserStudyPlanProgress): void {
+    try {
+      const plans = this.getUserStudyPlans(progress.userId);
+      plans[progress.studyPlanId] = progress;
+      localStorage.setItem(`${STORAGE_KEYS.USER_STUDY_PLANS}_${progress.userId}`, JSON.stringify(plans));
+    } catch (e) {
+      console.error('Error saving user study plan:', e);
+    }
+  },
+
+  // ===========================================================================
+  // PHASE 5: DAILY CHALLENGE (SECTIONS 11, 12)
+  // ===========================================================================
+  getDailyChallengeRecords(userId: string): Record<string, { date: string; problemId: string; solved: boolean; xpAwarded: boolean }> {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.DAILY_CHALLENGES}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching daily challenge records:', e);
+    }
+    return {};
+  },
+
+  recordDailyChallengeSolve(userId: string, dateStr: string, problemId: string): { firstSolveToday: boolean; xpAwarded: number } {
+    const records = this.getDailyChallengeRecords(userId);
+    const existing = records[dateStr];
+    if (existing && existing.solved) {
+      return { firstSolveToday: false, xpAwarded: 0 };
+    }
+
+    records[dateStr] = {
+      date: dateStr,
+      problemId,
+      solved: true,
+      xpAwarded: true
+    };
+
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.DAILY_CHALLENGES}_${userId}`, JSON.stringify(records));
+    } catch (e) {
+      console.error(e);
+    }
+
+    // Award +50 bonus XP idempotently
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) {
+      user.xp += 50;
+      this.saveCurrentUser(user);
+      this.recordXpTransaction(userId, 50, 'daily_challenge', 'daily_challenge', dateStr);
+    }
+
+    return { firstSolveToday: true, xpAwarded: 50 };
+  },
+
+  // ===========================================================================
+  // PHASE 5: USER ACHIEVEMENTS (SECTION 35)
+  // ===========================================================================
+  getUserAchievements(userId: string): string[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.USER_ACHIEVEMENTS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Error fetching achievements:', e);
+    }
+    const user = this.getCurrentUser();
+    return user?.badges || [];
+  },
+
+  unlockAchievement(userId: string, achievementId: string): boolean {
+    const list = this.getUserAchievements(userId);
+    if (list.includes(achievementId)) return false; // Idempotent: already unlocked
+
+    list.push(achievementId);
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.USER_ACHIEVEMENTS}_${userId}`, JSON.stringify(list));
+    } catch (e) {
+      console.error(e);
+    }
+
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) {
+      if (!user.badges.includes(achievementId)) {
+        user.badges.push(achievementId);
+      }
+      this.saveCurrentUser(user);
+      this.recordActivity(userId, 'badge_earned', achievementId);
+      this.addNotification({
+        title: 'Achievement Unlocked! 🏆',
+        message: `You earned the "${achievementId}" achievement. Keep progressing!`,
+        type: 'badge'
+      }, userId);
+    }
+    return true;
+  },
+
+  // ===========================================================================
+  // PHASE 5: CONTEST REGISTRATIONS & RATINGS (SECTIONS 26-32)
+  // ===========================================================================
+  getContestRegistrations(userId: string): string[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.CONTEST_REGISTRATIONS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  },
+
+  registerForContest(userId: string, contestId: string): boolean {
+    const regs = this.getContestRegistrations(userId);
+    if (!regs.includes(contestId)) {
+      regs.push(contestId);
+      try {
+        localStorage.setItem(`${STORAGE_KEYS.CONTEST_REGISTRATIONS}_${userId}`, JSON.stringify(regs));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return true;
+  },
+
+  getContestRatingHistory(userId: string): ContestRatingHistoryItem[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.CONTEST_RATINGS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  },
+
+  saveContestRatingResult(userId: string, result: ContestRatingHistoryItem): void {
+    const history = this.getContestRatingHistory(userId);
+    history.push(result);
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.CONTEST_RATINGS}_${userId}`, JSON.stringify(history));
+    } catch (e) {
+      console.error(e);
+    }
+
+    const user = this.getCurrentUser();
+    if (user && user.id === userId) {
+      user.contestRating = result.newRating;
+      user.peakContestRating = Math.max(user.peakContestRating || 1500, result.newRating);
+      user.contestCount = (user.contestCount || 0) + 1;
+      user.bestContestRank = user.bestContestRank ? Math.min(user.bestContestRank, result.rank) : result.rank;
+      this.saveCurrentUser(user);
+    }
+  },
+
+  // ===========================================================================
+  // PHASE 5: INTERVIEW SESSIONS (SECTIONS 39, 40)
+  // ===========================================================================
+  getInterviewSessions(userId: string): InterviewSessionConfig[] {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.INTERVIEW_SESSIONS}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  },
+
+  saveInterviewSession(session: InterviewSessionConfig, userId: string): void {
+    const sessions = this.getInterviewSessions(userId);
+    const idx = sessions.findIndex(s => s.id === session.id);
+    if (idx !== -1) {
+      sessions[idx] = session;
+    } else {
+      sessions.unshift(session);
+    }
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.INTERVIEW_SESSIONS}_${userId}`, JSON.stringify(sessions.slice(0, 50)));
+    } catch (e) {
+      console.error(e);
+    }
   }
 };
+

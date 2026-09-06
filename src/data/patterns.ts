@@ -2,9 +2,62 @@ import { PatternGuide } from '../types';
 
 export const PATTERNS_DATA: PatternGuide[] = [
   {
+    id: 'frequency-map',
+    title: 'Frequency Map',
+    slug: 'frequency-map',
+    tagline: 'Track element frequencies with hash tables for instant O(1) lookups',
+    summary: 'Using hash tables or fixed-size array counters to record occurrences of items. Enables rapid comparison of counts, anagram verification, and frequency-based sorting.',
+    whenToUse: [
+      'Counting item occurrences in strings, arrays, or matrices',
+      'Checking anagram validity or character permutations',
+      'Finding the first non-repeating element or majority elements',
+      'Validating sub-collection balance conditions'
+    ],
+    howToRecognize: [
+      'Keywords: "frequency", "anagram", "most frequent", "at least k occurrences"',
+      'Requires quick existence or count queries during array iteration'
+    ],
+    diagramAscii: `
+Input: "abacaba"
+Map: { 'a': 4, 'b': 2, 'c': 1 }
+Check: map.get('a') === 4 (Instant O(1))
+`,
+    timeComplexity: 'O(n) pass to populate map',
+    spaceComplexity: 'O(k) where k is the size of the unique alphabet/set',
+    beginnerProblemIds: ['p-1', 'p-2'],
+    intermediateProblemIds: ['p-3', 'p-4'],
+    advancedProblemIds: ['p-5']
+  },
+  {
+    id: 'prefix-sum',
+    title: 'Prefix Sum',
+    slug: 'prefix-sum',
+    tagline: 'Precompute cumulative sums for instantaneous O(1) subarray queries',
+    summary: 'A prefix sum array stores cumulative sums from index 0 to i. Any contiguous subarray sum from index L to R can be evaluated in O(1) time as prefix[R] - prefix[L-1].',
+    whenToUse: [
+      'Repeated range sum queries over a static array',
+      'Counting subarrays whose sum equals target K (with a hash map)',
+      'Balancing split points or 2D matrix range sums'
+    ],
+    howToRecognize: [
+      'Problem asks about range sums or contiguous subarray sums',
+      'Keywords: "sum between indices i and j", "subarray with sum k"'
+    ],
+    diagramAscii: `
+Original: [ 3 , 1 ,  4 ,  1 ,  5 ]
+Prefix:   [ 3 , 4 ,  8 ,  9 , 14 ]
+Sum(1..3) = Prefix[3] - Prefix[0] = 9 - 3 = 6 (1 + 4 + 1 = 6)
+`,
+    timeComplexity: 'O(n) precomputation, O(1) per query',
+    spaceComplexity: 'O(n) auxiliary prefix array',
+    beginnerProblemIds: ['p-1', 'p-6'],
+    intermediateProblemIds: ['p-7', 'p-18'],
+    advancedProblemIds: ['p-58', 'p-59']
+  },
+  {
     id: 'two-pointers',
-    title: 'Two Pointers',
-    slug: 'two-pointers',
+    title: 'Two Pointer',
+    slug: 'two-pointer',
     tagline: 'Converging or parallel pointers to eliminate quadratic brute forces',
     summary: 'Two pointers is an approach where two indices iterate across data structure(s) simultaneously. Commonly used on sorted arrays or strings to evaluate pair conditions in O(n) time.',
     whenToUse: [
@@ -32,7 +85,7 @@ export const PATTERNS_DATA: PatternGuide[] = [
     spaceComplexity: 'O(1) auxiliary space',
     beginnerProblemIds: ['p-1', 'p-6', 'p-18'],
     intermediateProblemIds: ['p-7', 'p-8', 'p-19'],
-    advancedProblemIds: ['p-20', 'p-35', 'p-61']
+    advancedProblemIds: ['p-20', 'p-35']
   },
   {
     id: 'sliding-window',
@@ -58,7 +111,64 @@ Shrink:      [ b  c  a ] b  c  b  b   --> Valid again (len 3)
     spaceComplexity: 'O(k) where k is character set or window size',
     beginnerProblemIds: ['p-9', 'p-10'],
     intermediateProblemIds: ['p-11', 'p-12'],
-    advancedProblemIds: ['p-13', 'p-36', 'p-60', 'p-62']
+    advancedProblemIds: ['p-13', 'p-36']
+  },
+  {
+    id: 'fast-slow-pointers',
+    title: 'Fast/Slow Pointer',
+    slug: 'fast-slow-pointer',
+    tagline: 'Floyd cycle detection and linked-list midpoint finding at different velocities',
+    summary: 'Two pointers traverse a sequence at different speeds (typically 1 step vs 2 steps). If there is a cycle, the fast pointer will eventually lap the slow pointer.',
+    whenToUse: [
+      'Detecting cycles in a linked list or finite state sequence',
+      'Finding the start node of a cycle without modifying links or hash tables',
+      'Locating the exact middle node of a singly linked list in a single pass',
+      'Happy number cycle detection'
+    ],
+    howToRecognize: [
+      'Pointer-based structure where nodes might loop back',
+      'Requirement for O(1) memory cycle check'
+    ],
+    diagramAscii: `
+1 -> 2 -> 3 -> 4 -> 5 -> 3 (cycle)
+Step 0: S=1, F=1
+Step 1: S=2, F=3
+Step 2: S=3, F=5
+Step 3: S=4, F=4 (Collision! Cycle confirmed in O(1) space)
+`,
+    timeComplexity: 'O(n) where n is list length',
+    spaceComplexity: 'O(1) auxiliary pointers',
+    beginnerProblemIds: ['p-20', 'p-21'],
+    intermediateProblemIds: ['p-22', 'p-23'],
+    advancedProblemIds: ['p-37']
+  },
+  {
+    id: 'binary-search',
+    title: 'Binary Search',
+    slug: 'binary-search',
+    tagline: 'Divide and conquer on monotonic search spaces to achieve O(log n)',
+    summary: 'Repeatedly halve the candidate space by evaluating the midpoint. Applicable not only to sorted arrays, but any monotonic predicate (Binary Search on Answer).',
+    whenToUse: [
+      'Searching an element in a sorted or rotated sorted array',
+      'Finding the first or last occurrence of a condition',
+      'Finding the minimum capacity or speed that fulfills a task (Capacity to Ship Packages)',
+      'Square root or integer division without division operator'
+    ],
+    howToRecognize: [
+      'Target time complexity specified as O(log n)',
+      'Feasibility function is monotonic: if k works, all x > k work'
+    ],
+    diagramAscii: `
+Range: [ 2 , 5 , 8 , 12 , 16 , 23 , 38 , 56 ]  Target = 23
+Mid: 12 < 23 -> Discard left half [2..12]
+Range: [ 16 , 23 , 38 , 56 ]
+Mid: 23 === Target! Found in 2 steps.
+`,
+    timeComplexity: 'O(log n) comparisons',
+    spaceComplexity: 'O(1) iterative, O(log n) recursive',
+    beginnerProblemIds: ['p-24', 'p-25'],
+    intermediateProblemIds: ['p-26', 'p-27'],
+    advancedProblemIds: ['p-28']
   },
   {
     id: 'monotonic-stack',
@@ -68,180 +178,125 @@ Shrink:      [ b  c  a ] b  c  b  b   --> Valid again (len 3)
     summary: 'A stack where elements are kept in monotonic order. Whenever an incoming element violates the order, elements are popped and resolved.',
     whenToUse: [
       'Finding the Next Greater Element or Next Smaller Element',
-      'Histogram largest rectangle and trapping rainwater',
-      'Evaluating span of stock prices or daily temperatures'
+      'Daily Temperatures (days until warmer temperature)',
+      'Largest rectangle in a histogram',
+      'Trapping rain water'
     ],
     howToRecognize: [
-      'Phrases like "find the first element to the right that is greater than"',
-      'Boundary detection for bar/elevation problems'
+      'Questions asking for nearest greater or smaller neighbor for every index',
+      'Quadratic brute force scans to the right looking for a boundary'
     ],
     diagramAscii: `
-Stack (Decreasing): [ 73 , 71 ]   <-- Incoming: 75
-75 > 71: Pop 71 (answer for index of 71 is distance to 75)
-75 > 73: Pop 73 (answer for index of 73 is distance to 75)
-Push 75: [ 75 ]
+Heights: [ 2 , 1 , 5 , 6 , 2 , 3 ]
+Stack tracks indices of strictly increasing bars.
+Incoming '2' is smaller than top '6' -> pop 6, calculate area!
 `,
-    timeComplexity: 'O(n) amortized (each element pushed and popped once)',
-    spaceComplexity: 'O(n) stack memory',
+    timeComplexity: 'O(n) amortized (each element pushed and popped at most once)',
+    spaceComplexity: 'O(n) auxiliary stack',
     beginnerProblemIds: ['p-14', 'p-15'],
-    intermediateProblemIds: ['p-16', 'p-17', 'p-68'],
-    advancedProblemIds: ['p-37', 'p-61', 'p-62']
+    intermediateProblemIds: ['p-16', 'p-17'],
+    advancedProblemIds: ['p-37']
   },
   {
-    id: 'fast-slow-pointers',
-    title: 'Fast & Slow Pointers (Floyd’s Cycle)',
-    slug: 'fast-slow-pointers',
-    tagline: 'Two pointers moving at different speeds to detect cycles and midpoints',
-    summary: 'The slow pointer advances 1 step while the fast pointer advances 2 steps. If a cycle exists, they must inevitably collide.',
+    id: 'bfs',
+    title: 'BFS (Breadth-First Search)',
+    slug: 'bfs',
+    tagline: 'Level-by-level queue exploration for shortest unweighted paths',
+    summary: 'Breadth-First Search traverses tree or graph nodes layer by layer using a FIFO queue. In unweighted graphs, BFS guarantees discovery of the shortest path.',
     whenToUse: [
-      'Detecting loops in Linked Lists or sequences',
-      'Finding the middle node of a linked list in one pass',
-      'Finding cycle entrance point or happy number verification'
+      'Shortest path in unweighted graph or grid maze',
+      'Binary tree level order traversal',
+      'Connected components expansion and multi-source propagation (Rotting Oranges)',
+      'Word Ladder transformations'
     ],
     howToRecognize: [
-      'Linked list topology without random access',
-      'Implicit directed graph where each node has out-degree 1'
+      'Keywords: "shortest path", "fewest steps", "minimum mutations", "level by level"',
+      'Unweighted edge graphs or 2D grid pathfinding'
     ],
     diagramAscii: `
-1 -> 2 -> 3 -> 4 -> 5 -> 3 (loop back to 3)
-Step 1: S=2, F=3
-Step 2: S=3, F=5
-Step 3: S=4, F=4 (Collision at node 4 -> Cycle Confirmed!)
+Level 0:       ( Root )
+              /        \\
+Level 1:   ( Node A )   ( Node B )
+          /     \\            \\
+Level 2:( C )   ( D )        ( E )
+FIFO Queue ensures all Level 1 visited before Level 2.
 `,
-    timeComplexity: 'O(n) deterministic',
-    spaceComplexity: 'O(1) auxiliary pointer memory',
-    beginnerProblemIds: ['p-21'],
-    intermediateProblemIds: ['p-22'],
-    advancedProblemIds: ['p-23', 'p-72']
+    timeComplexity: 'O(V + E) where V is vertices, E is edges',
+    spaceComplexity: 'O(V) for queue and visited set',
+    beginnerProblemIds: ['p-30', 'p-38'],
+    intermediateProblemIds: ['p-39', 'p-54'],
+    advancedProblemIds: ['p-55']
   },
   {
-    id: 'binary-search',
-    title: 'Modified Binary Search',
-    slug: 'binary-search',
-    tagline: 'Logarithmic search space halving on monotonic or partitioned domains',
-    summary: 'Beyond basic array lookups, binary search applies to any monotonic predicate: can we achieve answer X? If yes, try tighter bounds.',
+    id: 'dfs',
+    title: 'DFS (Depth-First Search)',
+    slug: 'dfs',
+    tagline: 'Recursive exploration to leaf branches and deep connected components',
+    summary: 'Depth-First Search explores down a single branch as far as possible before backtracking. Essential for tree traversals, cycle detection, path counting, and component analysis.',
     whenToUse: [
-      'Sorted arrays, rotated sorted arrays, mountain arrays',
-      'Search space answer-optimization (e.g. Koko Eating Bananas, Capacity To Ship Packages)',
-      'Finding boundary/first true condition'
+      'Tree traversals (Preorder, Inorder, Postorder)',
+      'Detecting cycles in directed or undirected graphs',
+      'Flood fill and counting connected islands in grids',
+      'Lowest Common Ancestor and Tree Diameters'
     ],
     howToRecognize: [
-      'Target time complexity is explicitly O(log n)',
-      '"Minimize the maximum", "Maximize the minimum"'
+      'Keywords: "number of islands", "tree path sum", "connected components"',
+      'Need to exhaustively examine complete paths from root to leaf'
     ],
     diagramAscii: `
-Low = 0, High = 100
-Mid = (0 + 100) / 2 = 50
-Is condition(50) met?
-  Yes -> High = 50 (search left half)
-  No  -> Low = 51  (search right half)
+Path Traversal:
+Root -> Left Child -> Deepest Left Leaf -> Backtrack -> Right Child
+Call stack automatically manages state restoration.
 `,
-    timeComplexity: 'O(log n)',
-    spaceComplexity: 'O(1)',
-    beginnerProblemIds: ['p-24', 'p-25'],
-    intermediateProblemIds: ['p-26', 'p-27', 'p-65'],
-    advancedProblemIds: ['p-28', 'p-73']
-  },
-  {
-    id: 'tree-dfs-bfs',
-    title: 'Tree DFS & BFS Traversal',
-    slug: 'tree-dfs-bfs',
-    tagline: 'Exhaustive hierarchical traversal via recursion or level queue',
-    summary: 'DFS dives deep down paths using the call stack (ideal for max depth, paths, validation), while BFS visits level-by-level using a FIFO queue (ideal for shortest path, level order).',
-    whenToUse: [
-      'Binary tree properties (symmetric, height-balanced, diameter)',
-      'Level-order processing or zig-zag traversals',
-      'Path sum and lowest common ancestor queries'
-    ],
-    howToRecognize: [
-      'Binary Tree or N-ary Tree data structure given',
-      'Requires aggregate properties over all root-to-leaf paths'
-    ],
-    diagramAscii: `
-       [ 1 ]        Level 0
-      /     \\
-   [ 2 ]   [ 3 ]    Level 1
-   /   \\       \\
- [ 4 ] [ 5 ]   [ 6 ] Level 2
-BFS Queue: [1] -> [2, 3] -> [4, 5, 6]
-`,
-    timeComplexity: 'O(n) where n is number of nodes',
-    spaceComplexity: 'O(h) for DFS (height), O(w) for BFS (max width)',
-    beginnerProblemIds: ['p-29', 'p-30'],
-    intermediateProblemIds: ['p-31', 'p-32', 'p-54', 'p-55'],
-    advancedProblemIds: ['p-33', 'p-71']
+    timeComplexity: 'O(V + E)',
+    spaceComplexity: 'O(H) where H is maximum tree/path depth',
+    beginnerProblemIds: ['p-29', 'p-31'],
+    intermediateProblemIds: ['p-32', 'p-33', 'p-40'],
+    advancedProblemIds: ['p-34']
   },
   {
     id: 'topological-sort',
-    title: 'Topological Sort & Graph BFS',
+    title: 'Topological Sort',
     slug: 'topological-sort',
-    tagline: 'Linear ordering of graph vertices obeying directed dependencies',
-    summary: 'Using Kahn’s algorithm (in-degree tracking + queue) or DFS post-order to resolve dependency graphs, detect cycles, and schedule tasks.',
+    tagline: 'Linear ordering of DAG vertices respecting prerequisite dependencies',
+    summary: 'Produces a sequential ordering of vertices in a Directed Acyclic Graph such that for every directed edge u -> v, u appears before v (Kahn algorithm using in-degrees or DFS with post-order reversal).',
     whenToUse: [
-      'Course schedules with prerequisites',
-      'Package build order and task dependency pipelines',
-      'Detecting directed cycles in dependency trees'
+      'Course schedule and prerequisite ordering',
+      'Build systems and compilation order dependencies',
+      'Detecting cycles in directed prerequisite graphs'
     ],
     howToRecognize: [
-      'Given pairs of (A, B) where B must happen before A',
-      'Valid order exists if and only if graph is a Directed Acyclic Graph (DAG)'
+      'Tasks with prerequisite chains ("must complete A before B")',
+      'Need to detect circular dependency deadlocks'
     ],
     diagramAscii: `
 Course 0 ----> Course 1 ----> Course 3
-               ▲
-               │
-Course 2 ------┘
-In-degrees: [0: 0, 1: 2, 2: 0, 3: 1]
-Enqueue 0 & 2 -> Process -> Unlock 1 -> Unlock 3
+                   ▲
+Course 2 ----------│
+In-degrees: [0:0, 1:2, 2:0, 3:1]
+Order: [0, 2] -> [1] -> [3]
 `,
     timeComplexity: 'O(V + E)',
-    spaceComplexity: 'O(V + E)',
-    beginnerProblemIds: ['p-34'],
-    intermediateProblemIds: ['p-38', 'p-39', 'p-56', 'p-57', 'p-69', 'p-70'],
-    advancedProblemIds: ['p-40', 'p-75']
-  },
-  {
-    id: 'dynamic-programming',
-    title: 'Dynamic Programming (1-D & 2-D)',
-    slug: 'dynamic-programming',
-    tagline: 'Decompose into overlapping subproblems with memoized state transitions',
-    summary: 'Identify the state, define the recurrence relation (base case + transition), and build either top-down memoization or bottom-up tabular transitions.',
-    whenToUse: [
-      'Optimization (min cost, max profit, count ways)',
-      'Subproblems repeat heavily (Fibonacci, Coin Change, Knapsack, Edit Distance)',
-      'Choices made at step i depend on previous states'
-    ],
-    howToRecognize: [
-      '"Find the maximum number of ways", "Minimum coins to make change"',
-      'Greedy choice is provably non-optimal'
-    ],
-    diagramAscii: `
-dp[i] = min(dp[i - coin] + 1) for each coin
-Amount 0: 0 coins
-Amount 1: 1 coin (using 1)
-Amount 2: 2 coins (1+1)
-Amount 3: 3 coins (1+1+1)
-`,
-    timeComplexity: 'O(number of states * transitions)',
-    spaceComplexity: 'O(states) or O(1) state-reduction',
-    beginnerProblemIds: ['p-41', 'p-42'],
-    intermediateProblemIds: ['p-43', 'p-44', 'p-53', 'p-64'],
-    advancedProblemIds: ['p-45', 'p-46', 'p-63', 'p-65']
+    spaceComplexity: 'O(V + E) for adjacency list and queue',
+    beginnerProblemIds: ['p-38'],
+    intermediateProblemIds: ['p-39', 'p-54'],
+    advancedProblemIds: ['p-55']
   },
   {
     id: 'backtracking',
-    title: 'Backtracking & State Exploration',
+    title: 'Backtracking',
     slug: 'backtracking',
-    tagline: 'Systematically traverse choice trees, undoing moves when dead ends hit',
-    summary: 'A disciplined form of recursion that builds candidate solutions step by step, abandoning ("backtracking") as soon as a candidate cannot possibly lead to a valid answer.',
+    tagline: 'Systematic exploration of decision trees with pruning of invalid branches',
+    summary: 'A depth-first search strategy that builds candidate solutions incrementally and abandons (backtracks) as soon as it determines a candidate cannot possibly lead to a valid solution.',
     whenToUse: [
-      'Combinations, Permutations, Subsets, N-Queens, Sudoku solver',
-      'Generating all valid parenthesis combinations',
-      'Word search on a grid'
+      'Generating subsets, permutations, and combinations',
+      'N-Queens problem, Sudoku solver, and crossword filling',
+      'Word search on a letter grid',
+      'Partitioning strings into palindromes'
     ],
     howToRecognize: [
-      '"Return all possible permutations / combinations"',
-      'Constraints on N are typically small (N <= 15)'
+      'Keywords: "return all possible combinations", "find all configurations"',
+      'Problem constraints are deliberately small (N <= 15 or 20)'
     ],
     diagramAscii: `
 Choice Tree for Subsets of [1, 2]:
@@ -254,34 +309,119 @@ Choice Tree for Subsets of [1, 2]:
     timeComplexity: 'O(2^n) or O(n!)',
     spaceComplexity: 'O(n) recursion call stack depth',
     beginnerProblemIds: ['p-47'],
-    intermediateProblemIds: ['p-48', 'p-51', 'p-52', 'p-66'],
-    advancedProblemIds: ['p-49', 'p-74']
+    intermediateProblemIds: ['p-48', 'p-51', 'p-52'],
+    advancedProblemIds: ['p-49', 'p-53']
   },
   {
-    id: 'bitwise-manipulation',
-    title: 'Bit Manipulation & Masking',
-    slug: 'bitwise-manipulation',
-    tagline: 'Direct bitwise operations (XOR, AND, shifts) for constant-space tricks',
-    summary: 'Exploiting properties like x ^ x = 0, x ^ 0 = x, n & (n - 1) to clear lowest set bit, and bitmasks to represent subsets compactly.',
+    id: 'divide-and-conquer',
+    title: 'Divide & Conquer',
+    slug: 'divide-and-conquer',
+    tagline: 'Break problems into independent sub-problems and merge the results',
+    summary: 'Deconstructs a problem into two or more smaller subproblems of the same type, solves them recursively, and combines their solutions (e.g. Merge Sort, Quickselect).',
     whenToUse: [
-      'Finding single unique number when others appear twice',
-      'Counting number of 1 bits (Hamming weight)',
-      'Subset representations without array allocations'
+      'Merge k sorted lists or merge sort',
+      'Finding the Kth largest element via Quickselect in O(n) average time',
+      'Fast exponentiation (x^n in O(log n))'
     ],
     howToRecognize: [
-      'Array where every number appears k times except one',
-      'Power of two verification or bitwise arithmetic'
+      'Problem divides neatly into independent halves',
+      'Combining two half-solutions takes linear or sub-linear time'
     ],
     diagramAscii: `
-XOR cancelation:
-[ 4 , 1 , 2 , 1 , 2 ]
-4 ^ (1 ^ 1) ^ (2 ^ 2)
-= 4 ^ 0 ^ 0 = 4 (O(n) time, O(1) space!)
+          [ Problem (N) ]
+          /             \\
+  [ Left (N/2) ]     [ Right (N/2) ]
+          \\             /
+          [ Merged Result ]
 `,
-    timeComplexity: 'O(1) or O(number of bits)',
-    spaceComplexity: 'O(1) register operations',
-    beginnerProblemIds: ['p-50'],
-    intermediateProblemIds: ['p-4'],
-    advancedProblemIds: ['p-5']
+    timeComplexity: 'O(n log n) by Master Theorem',
+    spaceComplexity: 'O(log n) to O(n) auxiliary memory',
+    beginnerProblemIds: ['p-24'],
+    intermediateProblemIds: ['p-25', 'p-36'],
+    advancedProblemIds: ['p-52']
+  },
+  {
+    id: 'greedy',
+    title: 'Greedy',
+    slug: 'greedy',
+    tagline: 'Make the locally optimal choice at each step to reach a global optimum',
+    summary: 'Constructs a solution piece by piece, always choosing the immediate best option without backtracking. Proving greedy choice property and optimal substructure is key.',
+    whenToUse: [
+      'Interval scheduling and non-overlapping interval maximums',
+      'Jump Game minimum leaps or reachability',
+      'Gas station circular tour',
+      'Huffman encoding and fractional knapsack'
+    ],
+    howToRecognize: [
+      'Keywords: "maximum number of non-overlapping", "minimum jumps", "optimal allocation"',
+      'Sorted ordering allows decisions without revisiting earlier choices'
+    ],
+    diagramAscii: `
+Intervals sorted by end time:
+[1---3]  [2---5]  [4---6]  [6---8]
+  ▲                 ▲        ▲
+Selected          Selected Selected (Greedy non-overlapping)
+`,
+    timeComplexity: 'O(n log n) dominated by initial sort',
+    spaceComplexity: 'O(1) auxiliary variables',
+    beginnerProblemIds: ['p-3', 'p-8'],
+    intermediateProblemIds: ['p-56', 'p-57'],
+    advancedProblemIds: ['p-58']
+  },
+  {
+    id: 'dynamic-programming',
+    title: 'Dynamic Programming',
+    slug: 'dynamic-programming',
+    tagline: 'Overlapping subproblems and optimal substructure solved via memoization or tabulation',
+    summary: 'Breaks complex optimization challenges into overlapping subproblems, solving each once and saving results. Transforms exponential recursive trees into polynomial time.',
+    whenToUse: [
+      'Problems with overlapping subproblems and optimal substructure',
+      '1D DP: Climbing stairs, house robber, coin change',
+      '2D DP: Longest Common Subsequence, Edit Distance, Unique Paths',
+      '0/1 Knapsack variants'
+    ],
+    howToRecognize: [
+      'Keywords: "maximum profit", "minimum cost", "number of distinct ways to achieve"',
+      'Choices at step i affect state at step i+1'
+    ],
+    diagramAscii: `
+dp[i] = min(dp[i - coin] + 1) for coin in coins
+Tabulation:
+[ 0 , 1 , 2 , 1 , 2 , 1 , 2 , 3 ] (Amount: 0..7)
+Transitions calculated in strictly bottom-up order!
+`,
+    timeComplexity: 'O(N) or O(N * M) state transitions',
+    spaceComplexity: 'O(N) or O(1) with rolling state optimization',
+    beginnerProblemIds: ['p-41', 'p-42'],
+    intermediateProblemIds: ['p-43', 'p-44', 'p-45'],
+    advancedProblemIds: ['p-46']
+  },
+  {
+    id: 'union-find',
+    title: 'Union Find (Disjoint Set)',
+    slug: 'union-find',
+    tagline: 'Near O(1) connected component tracking with path compression and union by rank',
+    summary: 'A data structure that tracks a set of elements partitioned into non-overlapping subsets. Supports finding the representative of a set and unioning two sets efficiently.',
+    whenToUse: [
+      'Detecting cycles in an undirected graph',
+      'Counting connected components dynamically as edges are added',
+      'Kruskal Minimum Spanning Tree algorithm',
+      'Redundant connection identification'
+    ],
+    howToRecognize: [
+      'Keywords: "connected components", "valid tree check", "friend circles"',
+      'Graph edges added incrementally or dynamically'
+    ],
+    diagramAscii: `
+Parent array with path compression:
+[ 0 , 1 , 2 , 3 ] -> Union(0, 1) -> [ 1 , 1 , 2 , 3 ]
+Union(2, 3) -> [ 1 , 1 , 3 , 3 ]
+Union(1, 3) -> [ 3 , 3 , 3 , 3 ] (All in single component!)
+`,
+    timeComplexity: 'O(alpha(n)) nearly constant per operation (inverse Ackermann)',
+    spaceComplexity: 'O(n) for parent and rank arrays',
+    beginnerProblemIds: ['p-38'],
+    intermediateProblemIds: ['p-40', 'p-54'],
+    advancedProblemIds: ['p-55']
   }
 ];

@@ -11,22 +11,27 @@ import { StorageService } from './storage';
 // RELATIONAL TOPICS REPOSITORY
 // =============================================================================
 export const TOPICS_DATA: TopicRecord[] = [
-  { id: 'foundations', name: 'Foundations', slug: 'foundations', description: 'Core algorithmic thinking, time and space complexity, and basic data structures.' },
-  { id: 'arrays', name: 'Arrays & Hashing', slug: 'arrays', description: 'Contiguous memory buffers, fast hash lookups, frequency counters, and prefix arrays.' },
+  { id: 'arrays', name: 'Arrays', slug: 'arrays', description: 'Contiguous memory buffers, in-place manipulation, prefix arrays, and two-pointer traversals.' },
+  { id: 'strings', name: 'Strings', slug: 'strings', description: 'Character manipulations, palindromes, anagrams, parsing, and rolling hashes.' },
+  { id: 'hashing', name: 'Hashing', slug: 'hashing', description: 'Fast O(1) hash maps, frequency tables, hash sets, and complement lookups.' },
   { id: 'two-pointers', name: 'Two Pointers', slug: 'two-pointers', description: 'Converging or symmetric indices for sorted scans and window bounds.' },
   { id: 'sliding-window', name: 'Sliding Window', slug: 'sliding-window', description: 'Dynamic subarray boundaries for optimal contiguous segments.' },
   { id: 'stack', name: 'Stack', slug: 'stack', description: 'LIFO evaluation, parentheses balancing, and monotonic next-greater searches.' },
   { id: 'binary-search', name: 'Binary Search', slug: 'binary-search', description: 'Logarithmic search halving on monotonic domains and sorted sequences.' },
   { id: 'linked-list', name: 'Linked List', slug: 'linked-list', description: 'Pointer traversal, reversal, sentinel heads, and cycle detection.' },
   { id: 'trees', name: 'Trees', slug: 'trees', description: 'Hierarchical node traversal, recursive DFS, level-order BFS, and BST invariants.' },
-  { id: 'heap', name: 'Heap / Priority Queue', slug: 'heap', description: 'Min/max heaps for Top-K extraction, running medians, and priority scheduling.' },
-  { id: 'backtracking', name: 'Backtracking', slug: 'backtracking', description: 'Exhaustive combinatorial generation, branch pruning, and state exploration.' },
   { id: 'graphs', name: 'Graphs', slug: 'graphs', description: 'Adjacency lists, shortest paths, connected components, and topological orderings.' },
+  { id: 'heap', name: 'Heap', slug: 'heap', description: 'Min/max heaps for Top-K extraction, running medians, and priority scheduling.' },
   { id: 'greedy', name: 'Greedy', slug: 'greedy', description: 'Locally optimal decisions leading to global optimums without backtracking.' },
-  { id: 'intervals', name: 'Intervals', slug: 'intervals', description: 'Merging overlapping spans, meeting room schedules, and range sweeps.' },
+  { id: 'backtracking', name: 'Backtracking', slug: 'backtracking', description: 'Exhaustive combinatorial generation, branch pruning, and state exploration.' },
   { id: 'dynamic-programming', name: 'Dynamic Programming', slug: 'dynamic-programming', description: 'Overlapping subproblem memoization and bottom-up state transitions.' },
-  { id: 'bit-manipulation', name: 'Bit Manipulation', slug: 'bit-manipulation', description: 'Bitwise masks, XOR identities, binary bit counting, and shifts.' }
+  { id: 'bit-manipulation', name: 'Bit Manipulation', slug: 'bit-manipulation', description: 'Bitwise masks, XOR identities, binary bit counting, and shifts.' },
+  { id: 'math', name: 'Math', slug: 'math', description: 'Number theory, GCD, primes, combinatorics, and modular arithmetic.' },
+  { id: 'intervals', name: 'Intervals', slug: 'intervals', description: 'Merging overlapping spans, meeting room schedules, and range sweeps.' },
+  { id: 'tries', name: 'Tries', slug: 'tries', description: 'Prefix trees for fast string dictionary lookups and prefix matching.' },
+  { id: 'union-find', name: 'Union Find', slug: 'union-find', description: 'Disjoint set union for dynamic connected component tracking in graphs.' }
 ];
+
 
 // =============================================================================
 // RELATIONAL PATTERNS REPOSITORY
@@ -427,5 +432,219 @@ export const ProblemDatabase = {
     // 5. Fallback: Any unsolved problem
     const fallback = ALL_PROBLEMS.find(p => isUnsolved(p.id));
     return fallback || ALL_PROBLEMS.find(p => p.id !== currentProblemId) || ALL_PROBLEMS[0];
+  },
+
+  // ===========================================================================
+  // PHASE 5 R0: SORTING
+  // ===========================================================================
+  /**
+   * Sort problems by various criteria.
+   */
+  sortProblems<T extends Problem & { userStatus?: string }>(
+    problems: T[],
+    sortBy: string = 'default'
+  ): T[] {
+    const sorted = [...problems];
+    switch (sortBy) {
+      case 'difficulty-asc': {
+        const order: Record<string, number> = { Easy: 0, Medium: 1, Hard: 2 };
+        sorted.sort((a, b) => (order[a.difficulty] ?? 1) - (order[b.difficulty] ?? 1));
+        break;
+      }
+      case 'difficulty-desc': {
+        const order: Record<string, number> = { Easy: 0, Medium: 1, Hard: 2 };
+        sorted.sort((a, b) => (order[b.difficulty] ?? 1) - (order[a.difficulty] ?? 1));
+        break;
+      }
+      case 'acceptance': {
+        sorted.sort((a, b) => {
+          const aVal = parseFloat(a.acceptance) || 50;
+          const bVal = parseFloat(b.acceptance) || 50;
+          return bVal - aVal;
+        });
+        break;
+      }
+      case 'newest':
+        sorted.reverse();
+        break;
+      case 'title-asc':
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'title-desc':
+        sorted.sort((a, b) => b.title.localeCompare(a.title));
+        break;
+      case 'progress': {
+        const statusOrder: Record<string, number> = { unattempted: 0, attempted: 1, solved: 2 };
+        sorted.sort((a, b) => (statusOrder[b.userStatus || 'unattempted'] || 0) - (statusOrder[a.userStatus || 'unattempted'] || 0));
+        break;
+      }
+      default:
+        break;
+    }
+    return sorted;
+  },
+
+  // ===========================================================================
+  // PHASE 5 R0: TOPIC PERFORMANCE ANALYSIS (Weak Topics)
+  // ===========================================================================
+  /**
+   * Calculates user's solve percentage per topic.
+   * Minimum 3 attempts threshold before labeling strength.
+   */
+  getTopicPerformance(userId: string): {
+    topic: string;
+    totalProblems: number;
+    solved: number;
+    attempted: number;
+    percentage: number;
+    strength: 'Strong' | 'Developing' | 'Needs Practice' | 'Not Started';
+  }[] {
+    const userProgressMap = StorageService.getAllUserProblemProgress(userId);
+    const currentUser = StorageService.getCurrentUser();
+    const solvedIds = new Set(currentUser?.solvedProblemIds || []);
+    const attemptedIds = new Set(currentUser?.attemptedProblemIds || []);
+
+    const topicMap: Record<string, { total: number; solved: number; attempted: number }> = {};
+
+    for (const prob of ALL_PROBLEMS) {
+      const topic = prob.topic;
+      if (!topicMap[topic]) topicMap[topic] = { total: 0, solved: 0, attempted: 0 };
+      topicMap[topic].total++;
+      const prog = userProgressMap[prob.id];
+      if (prog?.status === 'solved' || solvedIds.has(prob.id)) {
+        topicMap[topic].solved++;
+        topicMap[topic].attempted++;
+      } else if (prog?.status === 'attempted' || attemptedIds.has(prob.id)) {
+        topicMap[topic].attempted++;
+      }
+    }
+
+    return Object.entries(topicMap).map(([topic, stats]) => {
+      const pct = stats.attempted > 0 ? Math.round((stats.solved / stats.attempted) * 100) : 0;
+      let strength: 'Strong' | 'Developing' | 'Needs Practice' | 'Not Started' = 'Not Started';
+      if (stats.attempted >= 3) {
+        if (pct >= 70) strength = 'Strong';
+        else if (pct >= 40) strength = 'Developing';
+        else strength = 'Needs Practice';
+      } else if (stats.attempted > 0) {
+        strength = 'Developing';
+      }
+      return {
+        topic,
+        totalProblems: stats.total,
+        solved: stats.solved,
+        attempted: stats.attempted,
+        percentage: pct,
+        strength
+      };
+    }).sort((a, b) => b.attempted - a.attempted);
+  },
+
+  /**
+   * Returns the weakest topics that need practice.
+   */
+  getWeakTopics(userId: string, limit: number = 5): {
+    topic: string;
+    totalProblems: number;
+    solved: number;
+    attempted: number;
+    percentage: number;
+    strength: 'Strong' | 'Developing' | 'Needs Practice' | 'Not Started';
+  }[] {
+    const all = this.getTopicPerformance(userId);
+    return all
+      .filter(t => t.attempted >= 1 && t.strength !== 'Strong')
+      .sort((a, b) => a.percentage - b.percentage)
+      .slice(0, limit);
+  },
+
+  // ===========================================================================
+  // PHASE 5 R0: RANDOM PROBLEM
+  // ===========================================================================
+  /**
+   * Selects a random unsolved problem, optionally filtered.
+   * Avoids recently returned problems using a simple session cache.
+   */
+  getRandomProblem(options: {
+    userId?: string;
+    difficulty?: string;
+    topic?: string;
+    pattern?: string;
+    excludeIds?: string[];
+  } = {}): Problem | null {
+    const { userId, difficulty, topic, pattern, excludeIds = [] } = options;
+    const currentUser = StorageService.getCurrentUser();
+    const solvedIds = new Set(currentUser?.solvedProblemIds || []);
+    const excludeSet = new Set(excludeIds);
+
+    let candidates = ALL_PROBLEMS.filter(p => {
+      if (solvedIds.has(p.id)) return false;
+      if (excludeSet.has(p.id)) return false;
+      if (difficulty && difficulty !== 'all' && p.difficulty.toLowerCase() !== difficulty.toLowerCase()) return false;
+      if (topic && topic !== 'all' && !p.topic.toLowerCase().includes(topic.toLowerCase())) return false;
+      if (pattern && pattern !== 'all' && !p.pattern.toLowerCase().includes(pattern.toLowerCase())) return false;
+      return true;
+    });
+
+    if (candidates.length === 0) {
+      // Fallback: include solved problems but exclude recent
+      candidates = ALL_PROBLEMS.filter(p => !excludeSet.has(p.id));
+    }
+
+    if (candidates.length === 0) return null;
+
+    const idx = Math.floor(Math.random() * candidates.length);
+    return candidates[idx];
+  },
+
+  // ===========================================================================
+  // PHASE 5 R0: PROBLEM COUNTS / STATS
+  // ===========================================================================
+  /**
+   * Returns problem count breakdown by difficulty.
+   */
+  getProblemCounts(): { total: number; easy: number; medium: number; hard: number } {
+    let easy = 0, medium = 0, hard = 0;
+    for (const p of ALL_PROBLEMS) {
+      if (p.difficulty === 'Easy') easy++;
+      else if (p.difficulty === 'Medium') medium++;
+      else if (p.difficulty === 'Hard') hard++;
+    }
+    return { total: ALL_PROBLEMS.length, easy, medium, hard };
+  },
+
+  /**
+   * Returns solve count breakdown for a user.
+   */
+  getUserSolveCounts(userId: string): { total: number; easy: number; medium: number; hard: number } {
+    const currentUser = StorageService.getCurrentUser();
+    const solvedIds = currentUser?.solvedProblemIds || [];
+    let easy = 0, medium = 0, hard = 0;
+    for (const id of solvedIds) {
+      const p = ALL_PROBLEMS.find(prob => prob.id === id);
+      if (!p) continue;
+      if (p.difficulty === 'Easy') easy++;
+      else if (p.difficulty === 'Medium') medium++;
+      else if (p.difficulty === 'Hard') hard++;
+    }
+    return { total: solvedIds.length, easy, medium, hard };
+  },
+
+  /**
+   * Returns all unique topics present in problems.
+   */
+  getUniqueTopics(): string[] {
+    const set = new Set<string>();
+    ALL_PROBLEMS.forEach(p => set.add(p.topic));
+    return Array.from(set).sort();
+  },
+
+  /**
+   * Returns all unique patterns present in problems.
+   */
+  getUniquePatterns(): string[] {
+    const set = new Set<string>();
+    ALL_PROBLEMS.forEach(p => { if (p.pattern) set.add(p.pattern); });
+    return Array.from(set).sort();
   }
 };

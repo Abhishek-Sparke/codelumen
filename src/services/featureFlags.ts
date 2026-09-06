@@ -10,6 +10,17 @@ export interface FeatureFlags {
   CPP_EXECUTION_ENABLED: boolean;
   JAVA_EXECUTION_ENABLED: boolean;
   SPARK_AI_ENABLED: boolean;
+  // Phase 5 Flags
+  PROBLEM_LIBRARY_V2: boolean;
+  STUDY_PLANS: boolean;
+  DAILY_CHALLENGE: boolean;
+  RECOMMENDATIONS: boolean;
+  PERSONAL_LISTS: boolean;
+  CONTESTS: boolean;
+  CONTEST_RATINGS: boolean;
+  ACHIEVEMENTS: boolean;
+  INTERVIEW_MODE: boolean;
+  FOCUS_MODE: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -19,6 +30,17 @@ const DEFAULT_FLAGS: FeatureFlags = {
   CPP_EXECUTION_ENABLED: false, // Disabled until compiler cluster is active
   JAVA_EXECUTION_ENABLED: false, // Disabled until compiler cluster is active
   SPARK_AI_ENABLED: true,
+  // Phase 5 Flags (Enabled by default)
+  PROBLEM_LIBRARY_V2: true,
+  STUDY_PLANS: true,
+  DAILY_CHALLENGE: true,
+  RECOMMENDATIONS: true,
+  PERSONAL_LISTS: true,
+  CONTESTS: true,
+  CONTEST_RATINGS: true,
+  ACHIEVEMENTS: true,
+  INTERVIEW_MODE: true,
+  FOCUS_MODE: true,
 };
 
 export class FeatureFlagService {
@@ -55,6 +77,16 @@ export class FeatureFlagService {
       CPP_EXECUTION_ENABLED: this.getFlag('CPP_EXECUTION_ENABLED'),
       JAVA_EXECUTION_ENABLED: this.getFlag('JAVA_EXECUTION_ENABLED'),
       SPARK_AI_ENABLED: this.getFlag('SPARK_AI_ENABLED'),
+      PROBLEM_LIBRARY_V2: this.getFlag('PROBLEM_LIBRARY_V2'),
+      STUDY_PLANS: this.getFlag('STUDY_PLANS'),
+      DAILY_CHALLENGE: this.getFlag('DAILY_CHALLENGE'),
+      RECOMMENDATIONS: this.getFlag('RECOMMENDATIONS'),
+      PERSONAL_LISTS: this.getFlag('PERSONAL_LISTS'),
+      CONTESTS: this.getFlag('CONTESTS'),
+      CONTEST_RATINGS: this.getFlag('CONTEST_RATINGS'),
+      ACHIEVEMENTS: this.getFlag('ACHIEVEMENTS'),
+      INTERVIEW_MODE: this.getFlag('INTERVIEW_MODE'),
+      FOCUS_MODE: this.getFlag('FOCUS_MODE'),
     };
   }
 
