@@ -176,6 +176,13 @@ export function transpilePythonToJs(pythonCode: string): { jsCode: string; funcN
   };
 }
 
+function __py_in(item: any, col: any): boolean {
+  if (col == null) return false;
+  if (typeof col.has === 'function') return col.has(item);
+  if (Array.isArray(col) || typeof col === 'string') return col.indexOf(item) !== -1;
+  return item in col;
+}
+
 function convertPythonExpr(expr: string): string {
   let e = expr.trim();
   e = e.replace(/\bTrue\b/g, 'true');
@@ -187,7 +194,7 @@ function convertPythonExpr(expr: string): string {
   e = e.replace(/\blen\((.*?)\)/g, '($1).length');
   e = e.replace(/\.append\((.*?)\)/g, '.push($1)');
   e = e.replace(/\bprint\((.*?)\)/g, 'console.log($1)');
-  e = e.replace(/([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_]+)/g, '($2 && ($1 in $2 || ($2.indexOf && $2.indexOf($1) !== -1)))');
+  e = e.replace(/([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_]+)/g, '__py_in($1, $2)');
   return e;
 }
 
@@ -254,25 +261,46 @@ export class BrowserExecutionEngine implements IExecutionProvider {
     const tStart = performance.now();
 
     try {
-      // Find candidate function name
-      const funcMatch = code.match(/function\s+([a-zA-Z0-9_]+)\s*\(/) ||
-                        code.match(/(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>)/);
-      const targetFuncName = funcMatch ? funcMatch[1] : '';
-
-      // Wrap user code in a function context
-      const runnerFactory = new Function(`
-        ${code};
-        var __fn = null;
-        if (typeof ${targetFuncName || 'null'} === 'function') {
-          __fn = ${targetFuncName};
-        } else if (typeof solution === 'function') {
-          __fn = solution;
-        } else if (typeof pairSumTarget === 'function') {
-          __fn = pairSumTarget;
-        } else if (typeof twoSum === 'function') {
-          __fn = twoSum;
+      // Find candidate function names
+      const funcNames: string[] = [];
+      const funcRegex = /(?:function\s+([a-zA-Z0-9_]+)|(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>))/g;
+      let match: RegExpExecArray | null;
+      while ((match = funcRegex.exec(code)) !== null) {
+        const name = match[1] || match[2];
+        if (name && !funcNames.includes(name)) {
+          funcNames.push(name);
         }
-        return __fn;
+      }
+
+      const checks = funcNames.map(f => `if (typeof ${f} === 'function') return ${f};`).join('\n');
+
+      // Wrap user code in a function context with Python polyfills
+      const runnerFactory = new Function(`
+        function __py_in(item, col) {
+          if (col == null) return false;
+          if (typeof col.has === 'function') return col.has(item);
+          if (Array.isArray(col) || typeof col === 'string') return col.indexOf(item) !== -1;
+          return item in col;
+        }
+        function set(iterable) { return new Set(iterable || []); }
+        function dict(entries) { return new Map(entries || []); }
+        function list(iterable) { return Array.from(iterable || []); }
+        function min(...args) {
+          if (args.length === 1 && Array.isArray(args[0])) return Math.min(...args[0]);
+          return Math.min(...args);
+        }
+        function max(...args) {
+          if (args.length === 1 && Array.isArray(args[0])) return Math.max(...args[0]);
+          return Math.max(...args);
+        }
+        function sum(arr) { return (arr || []).reduce((a, b) => a + b, 0); }
+        function abs(x) { return Math.abs(x); }
+        function sorted(arr) { return [...(arr || [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); }
+
+        ${code};
+        ${checks}
+        if (typeof solution === 'function') return solution;
+        return null;
       `);
 
       const targetFunc = runnerFactory();

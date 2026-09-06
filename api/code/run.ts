@@ -55,6 +55,13 @@ function areOutputsEquivalent(actual: any, expected: any): boolean {
   return false;
 }
 
+function __py_in(item: any, col: any): boolean {
+  if (col == null) return false;
+  if (typeof col.has === 'function') return col.has(item);
+  if (Array.isArray(col) || typeof col === 'string') return col.indexOf(item) !== -1;
+  return item in col;
+}
+
 function convertPythonExpr(expr: string): string {
   let e = expr.trim();
   e = e.replace(/\bTrue\b/g, 'true');
@@ -66,7 +73,7 @@ function convertPythonExpr(expr: string): string {
   e = e.replace(/\blen\((.*?)\)/g, '($1).length');
   e = e.replace(/\.append\((.*?)\)/g, '.push($1)');
   e = e.replace(/\bprint\((.*?)\)/g, 'console.log($1)');
-  e = e.replace(/([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_]+)/g, '($2 && ($1 in $2 || ($2.indexOf && $2.indexOf($1) !== -1)))');
+  e = e.replace(/([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_]+)/g, '__py_in($1, $2)');
   return e;
 }
 
@@ -97,21 +104,21 @@ function transpilePythonToJs(pythonCode: string): string {
         .map(p => p.trim().split(':')[0].trim())
         .filter(Boolean)
         .join(', ');
-      outLines.push(' '.repeat(currentIndent) + `function ${funcName}(${params}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'function ' + funcName + '(' + params + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
 
     if (line.match(/^elif\s+(.*?):$/)) {
       const cond = line.replace(/^elif\s+/, '').replace(/:$/, '');
-      outLines.push(' '.repeat(currentIndent) + `else if (${convertPythonExpr(cond)}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'else if (' + convertPythonExpr(cond) + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
 
     if (line.match(/^if\s+(.*?):$/)) {
       const cond = line.replace(/^if\s+/, '').replace(/:$/, '');
-      outLines.push(' '.repeat(currentIndent) + `if (${convertPythonExpr(cond)}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'if (' + convertPythonExpr(cond) + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
@@ -124,7 +131,7 @@ function transpilePythonToJs(pythonCode: string): string {
 
     if (line.match(/^while\s+(.*?):$/)) {
       const cond = line.replace(/^while\s+/, '').replace(/:$/, '');
-      outLines.push(' '.repeat(currentIndent) + `while (${convertPythonExpr(cond)}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'while (' + convertPythonExpr(cond) + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
@@ -133,15 +140,15 @@ function transpilePythonToJs(pythonCode: string): string {
     if (forRangeMatch) {
       const varName = forRangeMatch[1];
       const args = forRangeMatch[2].split(',').map(a => convertPythonExpr(a.trim()));
-      let init = `let ${varName} = 0; ${varName} < ${args[0]}; ${varName}++`;
+      let init = 'let ' + varName + ' = 0; ' + varName + ' < ' + args[0] + '; ' + varName + '++';
       if (args.length === 2) {
-        init = `let ${varName} = ${args[0]}; ${varName} < ${args[1]}; ${varName}++`;
+        init = 'let ' + varName + ' = ' + args[0] + '; ' + varName + ' < ' + args[1] + '; ' + varName + '++';
       } else if (args.length === 3) {
         const step = args[2];
         const op = step.startsWith('-') ? '>' : '<';
-        init = `let ${varName} = ${args[0]}; ${varName} ${op} ${args[1]}; ${varName} += ${step}`;
+        init = 'let ' + varName + ' = ' + args[0] + '; ' + varName + ' ' + op + ' ' + args[1] + '; ' + varName + ' += ' + step;
       }
-      outLines.push(' '.repeat(currentIndent) + `for (${init}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'for (' + init + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
@@ -150,7 +157,7 @@ function transpilePythonToJs(pythonCode: string): string {
     if (forInMatch) {
       const varName = forInMatch[1];
       const iter = convertPythonExpr(forInMatch[2]);
-      outLines.push(' '.repeat(currentIndent) + `for (const ${varName} of ${iter}) {`);
+      outLines.push(' '.repeat(currentIndent) + 'for (const ' + varName + ' of ' + iter + ') {');
       indentStack.push(currentIndent + 4);
       continue;
     }
@@ -159,7 +166,7 @@ function transpilePythonToJs(pythonCode: string): string {
 
     if (line.startsWith('return ') || line === 'return') {
       const retVal = line.replace(/^return\s*/, '');
-      outLines.push(' '.repeat(currentIndent) + `return ${convertPythonExpr(retVal)};`);
+      outLines.push(' '.repeat(currentIndent) + 'return ' + convertPythonExpr(retVal) + ';');
       continue;
     }
 
@@ -177,17 +184,6 @@ function transpilePythonToJs(pythonCode: string): string {
 
   return outLines.join('\n');
 }
-
-const BUILTIN_TEST_CASES: Record<string, RunnerTestCase[]> = {
-  'two-sum': [
-    { id: 'tc-1', position: 1, isPublic: true, input: [[2, 7, 11, 15], 9], expectedOutput: [0, 1] },
-    { id: 'tc-2', position: 2, isPublic: true, input: [[3, 2, 4], 6], expectedOutput: [1, 2] }
-  ],
-  'p-1': [
-    { id: 'tc-1', position: 1, isPublic: true, input: [[2, 7, 11, 15], 9], expectedOutput: [0, 1] },
-    { id: 'tc-2', position: 2, isPublic: true, input: [[3, 2, 4], 6], expectedOutput: [1, 2] }
-  ]
-};
 
 function executeCodeSandbox(code: string, language: string, testCases: RunnerTestCase[]) {
   const capturedStdout: string[] = [];
@@ -215,23 +211,45 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
       runnableJs = transpilePythonToJs(code);
     }
 
-    const funcMatch = runnableJs.match(/function\s+([a-zA-Z0-9_]+)\s*\(/) ||
-                      runnableJs.match(/(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>)/);
-    const targetFuncName = funcMatch ? funcMatch[1] : '';
+    // Extract all function definitions
+    const funcNames: string[] = [];
+    const funcRegex = /(?:function\s+([a-zA-Z0-9_]+)|(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>))/g;
+    let match: RegExpExecArray | null;
+    while ((match = funcRegex.exec(runnableJs)) !== null) {
+      const name = match[1] || match[2];
+      if (name && !funcNames.includes(name)) {
+        funcNames.push(name);
+      }
+    }
+
+    const checks = funcNames.map(f => 'if (typeof ' + f + ' === "function") return ' + f + ';').join('\n');
 
     const runnerFactory = new Function(`
-      ${runnableJs};
-      var __fn = null;
-      if (typeof ${targetFuncName || 'null'} === 'function') {
-        __fn = ${targetFuncName};
-      } else if (typeof solution === 'function') {
-        __fn = solution;
-      } else if (typeof pairSumTarget === 'function') {
-        __fn = pairSumTarget;
-      } else if (typeof twoSum === 'function') {
-        __fn = twoSum;
+      function __py_in(item, col) {
+        if (col == null) return false;
+        if (typeof col.has === 'function') return col.has(item);
+        if (Array.isArray(col) || typeof col === 'string') return col.indexOf(item) !== -1;
+        return item in col;
       }
-      return __fn;
+      function set(iterable) { return new Set(iterable || []); }
+      function dict(entries) { return new Map(entries || []); }
+      function list(iterable) { return Array.from(iterable || []); }
+      function min(...args) {
+        if (args.length === 1 && Array.isArray(args[0])) return Math.min(...args[0]);
+        return Math.min(...args);
+      }
+      function max(...args) {
+        if (args.length === 1 && Array.isArray(args[0])) return Math.max(...args[0]);
+        return Math.max(...args);
+      }
+      function sum(arr) { return (arr || []).reduce((a, b) => a + b, 0); }
+      function abs(x) { return Math.abs(x); }
+      function sorted(arr) { return [...(arr || [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); }
+
+      ${runnableJs};
+      ${checks}
+      if (typeof solution === 'function') return solution;
+      return null;
     `);
 
     const targetFunc = runnerFactory();
@@ -270,7 +288,7 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
         passed = areOutputsEquivalent(actualOutput, tc.expectedOutput);
         if (passed) passedCount++;
       } catch (err: any) {
-        errorMessage = `${err.name || 'Error'}: ${err.message || String(err)}`;
+        errorMessage = (err.name || 'Error') + ': ' + (err.message || String(err));
         passed = false;
       }
 
@@ -313,7 +331,7 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
       total_test_cases: testCases.length,
       passed_test_cases: 0,
       test_results: [],
-      error_message: `${err.name || 'Error'}: ${err.message || String(err)}`,
+      error_message: (err.name || 'Error') + ': ' + (err.message || String(err)),
       stdout: capturedStdout.length > 0 ? capturedStdout.join('\n') : undefined,
       stderr: capturedStderr.length > 0 ? capturedStderr.join('\n') : undefined
     };
@@ -324,14 +342,7268 @@ function executeCodeSandbox(code: string, language: string, testCases: RunnerTes
   }
 }
 
+const PUBLIC_TEST_CASES: Record<string, RunnerTestCase[]> = {
+  "p-1": [
+    {
+      "id": "tc-pub-p-1-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          11,
+          15
+        ],
+        9
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-1-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          4
+        ],
+        6
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-1-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          3
+        ],
+        6
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    }
+  ],
+  "two-sum-indices": [
+    {
+      "id": "tc-pub-p-1-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          11,
+          15
+        ],
+        9
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-1-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          4
+        ],
+        6
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-1-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          3
+        ],
+        6
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    }
+  ],
+  "p-2": [
+    {
+      "id": "tc-pub-p-2-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-2-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-2-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1,
+          1,
+          3,
+          3,
+          4,
+          3,
+          2,
+          4,
+          2
+        ]
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "contains-duplicate-value": [
+    {
+      "id": "tc-pub-p-2-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-2-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-2-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1,
+          1,
+          3,
+          3,
+          4,
+          3,
+          2,
+          4,
+          2
+        ]
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-3": [
+    {
+      "id": "tc-pub-p-3-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "anagram",
+        "nagaram"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-3-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "rat",
+        "car"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-3-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "listen",
+        "silent"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "valid-anagram-frequency": [
+    {
+      "id": "tc-pub-p-3-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "anagram",
+        "nagaram"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-3-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "rat",
+        "car"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-3-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "listen",
+        "silent"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-4": [
+    {
+      "id": "tc-pub-p-4-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "eat",
+          "tea",
+          "tan",
+          "ate",
+          "nat",
+          "bat"
+        ]
+      ],
+      "expectedOutput": [
+        [
+          "eat",
+          "tea",
+          "ate"
+        ],
+        [
+          "tan",
+          "nat"
+        ],
+        [
+          "bat"
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-4-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          ""
+        ]
+      ],
+      "expectedOutput": [
+        [
+          ""
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-4-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "a"
+        ]
+      ],
+      "expectedOutput": [
+        [
+          "a"
+        ]
+      ]
+    }
+  ],
+  "group-anagrams-by-signature": [
+    {
+      "id": "tc-pub-p-4-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "eat",
+          "tea",
+          "tan",
+          "ate",
+          "nat",
+          "bat"
+        ]
+      ],
+      "expectedOutput": [
+        [
+          "eat",
+          "tea",
+          "ate"
+        ],
+        [
+          "tan",
+          "nat"
+        ],
+        [
+          "bat"
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-4-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          ""
+        ]
+      ],
+      "expectedOutput": [
+        [
+          ""
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-4-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "a"
+        ]
+      ],
+      "expectedOutput": [
+        [
+          "a"
+        ]
+      ]
+    }
+  ],
+  "p-5": [
+    {
+      "id": "tc-pub-p-5-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          100,
+          4,
+          200,
+          1,
+          3,
+          2
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-5-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          3,
+          7,
+          2,
+          5,
+          8,
+          4,
+          6,
+          0,
+          1
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-5-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "longest-consecutive-sequence-linear": [
+    {
+      "id": "tc-pub-p-5-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          100,
+          4,
+          200,
+          1,
+          3,
+          2
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-5-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          3,
+          7,
+          2,
+          5,
+          8,
+          4,
+          6,
+          0,
+          1
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-5-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-6": [
+    {
+      "id": "tc-pub-p-6-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "A man, a plan, a canal: Panama"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-6-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "race a car"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-6-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        " "
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "valid-palindrome-alphanumeric": [
+    {
+      "id": "tc-pub-p-6-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "A man, a plan, a canal: Panama"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-6-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "race a car"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-6-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        " "
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-7": [
+    {
+      "id": "tc-pub-p-7-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          11,
+          15
+        ],
+        9
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-7-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          4
+        ],
+        6
+      ],
+      "expectedOutput": [
+        1,
+        3
+      ]
+    },
+    {
+      "id": "tc-pub-p-7-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0
+        ],
+        -1
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    }
+  ],
+  "two-sum-sorted-array": [
+    {
+      "id": "tc-pub-p-7-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          11,
+          15
+        ],
+        9
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-7-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          4
+        ],
+        6
+      ],
+      "expectedOutput": [
+        1,
+        3
+      ]
+    },
+    {
+      "id": "tc-pub-p-7-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0
+        ],
+        -1
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    }
+  ],
+  "p-8": [
+    {
+      "id": "tc-pub-p-8-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          1,
+          2,
+          -1,
+          -4
+        ]
+      ],
+      "expectedOutput": [
+        [
+          -1,
+          -1,
+          2
+        ],
+        [
+          -1,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-8-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-8-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "three-sum-triplets-zero": [
+    {
+      "id": "tc-pub-p-8-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          1,
+          2,
+          -1,
+          -4
+        ]
+      ],
+      "expectedOutput": [
+        [
+          -1,
+          -1,
+          2
+        ],
+        [
+          -1,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-8-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-8-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "p-9": [
+    {
+      "id": "tc-pub-p-9-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          1,
+          5,
+          3,
+          6,
+          4
+        ]
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-9-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          6,
+          4,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-9-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          4,
+          1
+        ]
+      ],
+      "expectedOutput": 2
+    }
+  ],
+  "best-time-to-buy-and-sell-stock": [
+    {
+      "id": "tc-pub-p-9-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          1,
+          5,
+          3,
+          6,
+          4
+        ]
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-9-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          6,
+          4,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-9-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          4,
+          1
+        ]
+      ],
+      "expectedOutput": 2
+    }
+  ],
+  "p-10": [
+    {
+      "id": "tc-pub-p-10-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "abcabcbb"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-10-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "bbbbb"
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-10-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "pwwkew"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-10-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        ""
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "longest-substring-without-repeating": [
+    {
+      "id": "tc-pub-p-10-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "abcabcbb"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-10-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "bbbbb"
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-10-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "pwwkew"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-10-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        ""
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-11": [
+    {
+      "id": "tc-pub-p-11-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ABAB",
+        2
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-11-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "AABABBA",
+        1
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-11-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "AAAA",
+        2
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "longest-repeating-character-replacement": [
+    {
+      "id": "tc-pub-p-11-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ABAB",
+        2
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-11-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "AABABBA",
+        1
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-11-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "AAAA",
+        2
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "p-12": [
+    {
+      "id": "tc-pub-p-12-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ab",
+        "eidbaooo"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-12-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "ab",
+        "eidboaoo"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-12-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "adc",
+        "dcda"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "permutation-in-string-sliding": [
+    {
+      "id": "tc-pub-p-12-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ab",
+        "eidbaooo"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-12-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "ab",
+        "eidboaoo"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-12-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "adc",
+        "dcda"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-13": [
+    {
+      "id": "tc-pub-p-13-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ADOBECODEBANC",
+        "ABC"
+      ],
+      "expectedOutput": "BANC"
+    },
+    {
+      "id": "tc-pub-p-13-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "a",
+        "a"
+      ],
+      "expectedOutput": "a"
+    },
+    {
+      "id": "tc-pub-p-13-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "a",
+        "aa"
+      ],
+      "expectedOutput": ""
+    }
+  ],
+  "minimum-window-substring-optimal": [
+    {
+      "id": "tc-pub-p-13-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ADOBECODEBANC",
+        "ABC"
+      ],
+      "expectedOutput": "BANC"
+    },
+    {
+      "id": "tc-pub-p-13-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "a",
+        "a"
+      ],
+      "expectedOutput": "a"
+    },
+    {
+      "id": "tc-pub-p-13-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "a",
+        "aa"
+      ],
+      "expectedOutput": ""
+    }
+  ],
+  "p-14": [
+    {
+      "id": "tc-pub-p-14-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "()"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-14-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "()[]{}"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-14-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "(]"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-14-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        "([)]"
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "valid-parentheses-matching": [
+    {
+      "id": "tc-pub-p-14-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "()"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-14-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "()[]{}"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-14-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "(]"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-14-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        "([)]"
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-15": [
+    {
+      "id": "tc-pub-p-15-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -2,
+          0,
+          -3
+        ]
+      ],
+      "expectedOutput": [
+        -3,
+        0,
+        -2
+      ]
+    }
+  ],
+  "min-stack-constant-time": [
+    {
+      "id": "tc-pub-p-15-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -2,
+          0,
+          -3
+        ]
+      ],
+      "expectedOutput": [
+        -3,
+        0,
+        -2
+      ]
+    }
+  ],
+  "p-16": [
+    {
+      "id": "tc-pub-p-16-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "2",
+          "1",
+          "+",
+          "3",
+          "*"
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-16-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "4",
+          "13",
+          "5",
+          "/",
+          "+"
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-16-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "10",
+          "6",
+          "9",
+          "3",
+          "+",
+          "-11",
+          "*",
+          "/",
+          "*",
+          "17",
+          "+",
+          "5",
+          "+"
+        ]
+      ],
+      "expectedOutput": 22
+    }
+  ],
+  "evaluate-reverse-polish-notation": [
+    {
+      "id": "tc-pub-p-16-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "2",
+          "1",
+          "+",
+          "3",
+          "*"
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-16-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "4",
+          "13",
+          "5",
+          "/",
+          "+"
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-16-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "10",
+          "6",
+          "9",
+          "3",
+          "+",
+          "-11",
+          "*",
+          "/",
+          "*",
+          "17",
+          "+",
+          "5",
+          "+"
+        ]
+      ],
+      "expectedOutput": 22
+    }
+  ],
+  "p-17": [
+    {
+      "id": "tc-pub-p-17-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          73,
+          74,
+          75,
+          71,
+          69,
+          72,
+          76,
+          73
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        4,
+        2,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-17-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          40,
+          50,
+          60
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-17-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          60,
+          90
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "daily-temperatures-monotonic-stack": [
+    {
+      "id": "tc-pub-p-17-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          73,
+          74,
+          75,
+          71,
+          69,
+          72,
+          76,
+          73
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        4,
+        2,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-17-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          40,
+          50,
+          60
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-17-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          60,
+          90
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "p-18": [
+    {
+      "id": "tc-pub-p-18-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          8,
+          6,
+          2,
+          5,
+          4,
+          8,
+          3,
+          7
+        ]
+      ],
+      "expectedOutput": 49
+    },
+    {
+      "id": "tc-pub-p-18-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-18-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          3,
+          2,
+          1,
+          4
+        ]
+      ],
+      "expectedOutput": 16
+    }
+  ],
+  "container-with-most-water-optimal": [
+    {
+      "id": "tc-pub-p-18-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          8,
+          6,
+          2,
+          5,
+          4,
+          8,
+          3,
+          7
+        ]
+      ],
+      "expectedOutput": 49
+    },
+    {
+      "id": "tc-pub-p-18-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-18-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          3,
+          2,
+          1,
+          4
+        ]
+      ],
+      "expectedOutput": 16
+    }
+  ],
+  "p-19": [
+    {
+      "id": "tc-pub-p-19-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          3,
+          2,
+          1,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-19-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          0,
+          3,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-19-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "trapping-rain-water-hard": [
+    {
+      "id": "tc-pub-p-19-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          3,
+          2,
+          1,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-19-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          0,
+          3,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-19-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-20": [
+    {
+      "id": "tc-pub-p-20-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expectedOutput": [
+        5,
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-20-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": [
+        2,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-20-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "reverse-linked-list-iterative": [
+    {
+      "id": "tc-pub-p-20-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expectedOutput": [
+        5,
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-20-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": [
+        2,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-20-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "p-21": [
+    {
+      "id": "tc-pub-p-21-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          0,
+          -4
+        ],
+        1
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-21-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        0
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-21-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        -1
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "linked-list-cycle-detection": [
+    {
+      "id": "tc-pub-p-21-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          0,
+          -4
+        ],
+        1
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-21-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        0
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-21-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        -1
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-22": [
+    {
+      "id": "tc-pub-p-22-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          4
+        ],
+        [
+          1,
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "tc-pub-p-22-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [],
+        []
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-22-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [],
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        0
+      ]
+    }
+  ],
+  "merge-two-sorted-lists-sentinel": [
+    {
+      "id": "tc-pub-p-22-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          4
+        ],
+        [
+          1,
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "tc-pub-p-22-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [],
+        []
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-22-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [],
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        0
+      ]
+    }
+  ],
+  "p-23": [
+    {
+      "id": "tc-pub-p-23-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        2
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "id": "tc-pub-p-23-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-23-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    }
+  ],
+  "remove-nth-node-from-end": [
+    {
+      "id": "tc-pub-p-23-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        2
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "id": "tc-pub-p-23-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-23-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    }
+  ],
+  "p-24": [
+    {
+      "id": "tc-pub-p-24-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        9
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-24-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        2
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-24-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          5
+        ],
+        5
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "binary-search-exact-target": [
+    {
+      "id": "tc-pub-p-24-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        9
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-24-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        2
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-24-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          5
+        ],
+        5
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-25": [
+    {
+      "id": "tc-pub-p-25-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            3,
+            5,
+            7
+          ],
+          [
+            10,
+            11,
+            16,
+            20
+          ],
+          [
+            23,
+            30,
+            34,
+            60
+          ]
+        ],
+        3
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-25-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            3,
+            5,
+            7
+          ],
+          [
+            10,
+            11,
+            16,
+            20
+          ],
+          [
+            23,
+            30,
+            34,
+            60
+          ]
+        ],
+        13
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "search-a-2d-matrix-optimal": [
+    {
+      "id": "tc-pub-p-25-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            3,
+            5,
+            7
+          ],
+          [
+            10,
+            11,
+            16,
+            20
+          ],
+          [
+            23,
+            30,
+            34,
+            60
+          ]
+        ],
+        3
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-25-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            3,
+            5,
+            7
+          ],
+          [
+            10,
+            11,
+            16,
+            20
+          ],
+          [
+            23,
+            30,
+            34,
+            60
+          ]
+        ],
+        13
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-26": [
+    {
+      "id": "tc-pub-p-26-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        0
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-26-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        3
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-26-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        0
+      ],
+      "expectedOutput": -1
+    }
+  ],
+  "search-in-rotated-sorted-array": [
+    {
+      "id": "tc-pub-p-26-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        0
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-26-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        3
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-26-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        0
+      ],
+      "expectedOutput": -1
+    }
+  ],
+  "p-27": [
+    {
+      "id": "tc-pub-p-27-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          4,
+          5,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-27-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-27-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          11,
+          13,
+          15,
+          17
+        ]
+      ],
+      "expectedOutput": 11
+    }
+  ],
+  "find-minimum-in-rotated-sorted-array": [
+    {
+      "id": "tc-pub-p-27-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          4,
+          5,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-27-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-27-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          11,
+          13,
+          15,
+          17
+        ]
+      ],
+      "expectedOutput": 11
+    }
+  ],
+  "p-28": [
+    {
+      "id": "tc-pub-p-28-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          6,
+          7,
+          11
+        ],
+        8
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-28-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          11,
+          23,
+          4,
+          20
+        ],
+        5
+      ],
+      "expectedOutput": 30
+    },
+    {
+      "id": "tc-pub-p-28-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          11,
+          23,
+          4,
+          20
+        ],
+        6
+      ],
+      "expectedOutput": 23
+    }
+  ],
+  "koko-eating-bananas-search-space": [
+    {
+      "id": "tc-pub-p-28-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          6,
+          7,
+          11
+        ],
+        8
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-28-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          11,
+          23,
+          4,
+          20
+        ],
+        5
+      ],
+      "expectedOutput": 30
+    },
+    {
+      "id": "tc-pub-p-28-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          11,
+          23,
+          4,
+          20
+        ],
+        6
+      ],
+      "expectedOutput": 23
+    }
+  ],
+  "p-29": [
+    {
+      "id": "tc-pub-p-29-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-29-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          null,
+          2
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-29-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "maximum-depth-of-binary-tree-dfs": [
+    {
+      "id": "tc-pub-p-29-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-29-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          null,
+          2
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-29-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-30": [
+    {
+      "id": "tc-pub-p-30-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          7,
+          1,
+          3,
+          6,
+          9
+        ]
+      ],
+      "expectedOutput": [
+        4,
+        7,
+        2,
+        9,
+        6,
+        3,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-30-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        2,
+        3,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-30-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "invert-binary-tree-mirror": [
+    {
+      "id": "tc-pub-p-30-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          7,
+          1,
+          3,
+          6,
+          9
+        ]
+      ],
+      "expectedOutput": [
+        4,
+        7,
+        2,
+        9,
+        6,
+        3,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-30-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        2,
+        3,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-30-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "p-31": [
+    {
+      "id": "tc-pub-p-31-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      ],
+      "expectedOutput": [
+        [
+          3
+        ],
+        [
+          9,
+          20
+        ],
+        [
+          15,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-31-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-31-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "binary-tree-level-order-traversal": [
+    {
+      "id": "tc-pub-p-31-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      ],
+      "expectedOutput": [
+        [
+          3
+        ],
+        [
+          9,
+          20
+        ],
+        [
+          15,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-31-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-31-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "p-32": [
+    {
+      "id": "tc-pub-p-32-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-32-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          5,
+          1,
+          4,
+          null,
+          null,
+          3,
+          6
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "validate-binary-search-tree": [
+    {
+      "id": "tc-pub-p-32-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-32-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          5,
+          1,
+          4,
+          null,
+          null,
+          3,
+          6
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-33": [
+    {
+      "id": "tc-pub-p-33-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8,
+          null,
+          null,
+          7,
+          4
+        ],
+        5,
+        1
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-33-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8,
+          null,
+          null,
+          7,
+          4
+        ],
+        5,
+        4
+      ],
+      "expectedOutput": 5
+    }
+  ],
+  "lowest-common-ancestor-binary-tree": [
+    {
+      "id": "tc-pub-p-55-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8
+        ],
+        5,
+        1
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-55-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8
+        ],
+        5,
+        4
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-55-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        1,
+        2
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-34": [
+    {
+      "id": "tc-pub-p-34-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "apple",
+          "apple",
+          "app",
+          "app"
+        ]
+      ],
+      "expectedOutput": [
+        true,
+        false,
+        true
+      ]
+    }
+  ],
+  "implement-trie-prefix-tree": [
+    {
+      "id": "tc-pub-p-71-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "apple"
+        ],
+        "apple"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-71-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "apple"
+        ],
+        "app"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-71-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "apple",
+          "app"
+        ],
+        "app"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-35": [
+    {
+      "id": "tc-pub-p-35-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "o",
+            "a",
+            "a",
+            "n"
+          ],
+          [
+            "e",
+            "t",
+            "a",
+            "e"
+          ],
+          [
+            "i",
+            "h",
+            "k",
+            "r"
+          ],
+          [
+            "i",
+            "f",
+            "l",
+            "v"
+          ]
+        ],
+        [
+          "oath",
+          "pea",
+          "eat",
+          "rain"
+        ]
+      ],
+      "expectedOutput": [
+        "eat",
+        "oath"
+      ]
+    }
+  ],
+  "word-search-ii-trie-backtracking": [
+    {
+      "id": "tc-pub-p-35-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "o",
+            "a",
+            "a",
+            "n"
+          ],
+          [
+            "e",
+            "t",
+            "a",
+            "e"
+          ],
+          [
+            "i",
+            "h",
+            "k",
+            "r"
+          ],
+          [
+            "i",
+            "f",
+            "l",
+            "v"
+          ]
+        ],
+        [
+          "oath",
+          "pea",
+          "eat",
+          "rain"
+        ]
+      ],
+      "expectedOutput": [
+        "eat",
+        "oath"
+      ]
+    }
+  ],
+  "p-36": [
+    {
+      "id": "tc-pub-p-36-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        2
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-36-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    }
+  ],
+  "top-k-frequent-elements": [
+    {
+      "id": "tc-pub-p-67-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        2
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-67-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-67-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          4,
+          4,
+          6,
+          6,
+          7
+        ],
+        1
+      ],
+      "expectedOutput": [
+        4
+      ]
+    }
+  ],
+  "p-37": [
+    {
+      "id": "tc-pub-p-37-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          1,
+          5,
+          6,
+          4
+        ],
+        2
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-37-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          3,
+          1,
+          2,
+          4,
+          5,
+          5,
+          6
+        ],
+        4
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "kth-largest-element-in-array": [
+    {
+      "id": "tc-pub-p-37-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          1,
+          5,
+          6,
+          4
+        ],
+        2
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-37-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          2,
+          3,
+          1,
+          2,
+          4,
+          5,
+          5,
+          6
+        ],
+        4
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "p-38": [
+    {
+      "id": "tc-pub-p-38-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "1",
+            "1",
+            "1",
+            "1",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "1",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-38-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "1",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "0",
+            "1",
+            "1"
+          ]
+        ]
+      ],
+      "expectedOutput": 3
+    }
+  ],
+  "number-of-islands-grid-bfs-dfs": [
+    {
+      "id": "tc-pub-p-38-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "1",
+            "1",
+            "1",
+            "1",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "1",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-38-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "1",
+            "0",
+            "0"
+          ],
+          [
+            "0",
+            "0",
+            "0",
+            "1",
+            "1"
+          ]
+        ]
+      ],
+      "expectedOutput": 3
+    }
+  ],
+  "p-39": [
+    {
+      "id": "tc-pub-p-39-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-39-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "course-schedule-cycle-detection": [
+    {
+      "id": "tc-pub-p-39-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-39-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-40": [
+    {
+      "id": "tc-pub-p-40-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            2,
+            3,
+            5
+          ],
+          [
+            3,
+            2,
+            3,
+            4,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            1
+          ],
+          [
+            6,
+            7,
+            1,
+            4,
+            5
+          ],
+          [
+            5,
+            1,
+            1,
+            2,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    }
+  ],
+  "pacific-atlantic-water-flow": [
+    {
+      "id": "tc-pub-p-56-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            2,
+            3,
+            5
+          ],
+          [
+            3,
+            2,
+            3,
+            4,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            1
+          ],
+          [
+            6,
+            7,
+            1,
+            4,
+            5
+          ],
+          [
+            5,
+            1,
+            1,
+            2,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-56-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "p-41": [
+    {
+      "id": "tc-pub-p-41-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-41-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-41-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        5
+      ],
+      "expectedOutput": 8
+    }
+  ],
+  "climbing-stairs-memoization": [
+    {
+      "id": "tc-pub-p-41-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-41-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-41-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        5
+      ],
+      "expectedOutput": 8
+    }
+  ],
+  "p-42": [
+    {
+      "id": "tc-pub-p-42-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-42-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          9,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 12
+    },
+    {
+      "id": "tc-pub-p-42-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "house-robber-linear-dp": [
+    {
+      "id": "tc-pub-p-42-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-42-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          7,
+          9,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 12
+    },
+    {
+      "id": "tc-pub-p-42-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-43": [
+    {
+      "id": "tc-pub-p-43-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          5
+        ],
+        11
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-43-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2
+        ],
+        3
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-43-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        0
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "coin-change-fewest-coins": [
+    {
+      "id": "tc-pub-p-43-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          5
+        ],
+        11
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-43-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2
+        ],
+        3
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-43-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        0
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-44": [
+    {
+      "id": "tc-pub-p-44-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "abcde",
+        "ace"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-44-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "abc",
+        "abc"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-44-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "abc",
+        "def"
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "longest-common-subsequence-2d-dp": [
+    {
+      "id": "tc-pub-p-44-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "abcde",
+        "ace"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-44-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "abc",
+        "abc"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-44-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "abc",
+        "def"
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-45": [
+    {
+      "id": "tc-pub-p-45-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        3,
+        7
+      ],
+      "expectedOutput": 28
+    },
+    {
+      "id": "tc-pub-p-45-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3,
+        2
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-45-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        1,
+        1
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "unique-paths-grid-combinatorics": [
+    {
+      "id": "tc-pub-p-45-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        3,
+        7
+      ],
+      "expectedOutput": 28
+    },
+    {
+      "id": "tc-pub-p-45-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3,
+        2
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-45-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        1,
+        1
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-46": [
+    {
+      "id": "tc-pub-p-46-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "horse",
+        "ros"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-46-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "intention",
+        "execution"
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-46-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "",
+        "a"
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "edit-distance-levenshtein": [
+    {
+      "id": "tc-pub-p-46-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "horse",
+        "ros"
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-46-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "intention",
+        "execution"
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-46-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "",
+        "a"
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-47": [
+    {
+      "id": "tc-pub-p-47-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-47-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "subsets-power-set-backtracking": [
+    {
+      "id": "tc-pub-p-47-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-47-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "p-48": [
+    {
+      "id": "tc-pub-p-48-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          6,
+          7
+        ],
+        7
+      ],
+      "expectedOutput": [
+        [
+          2,
+          2,
+          3
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-48-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          5
+        ],
+        8
+      ],
+      "expectedOutput": [
+        [
+          2,
+          2,
+          2,
+          2
+        ],
+        [
+          2,
+          3,
+          3
+        ],
+        [
+          3,
+          5
+        ]
+      ]
+    }
+  ],
+  "combination-sum-target": [
+    {
+      "id": "tc-pub-p-48-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          6,
+          7
+        ],
+        7
+      ],
+      "expectedOutput": [
+        [
+          2,
+          2,
+          3
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-48-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          5
+        ],
+        8
+      ],
+      "expectedOutput": [
+        [
+          2,
+          2,
+          2,
+          2
+        ],
+        [
+          2,
+          3,
+          3
+        ],
+        [
+          3,
+          5
+        ]
+      ]
+    }
+  ],
+  "p-49": [
+    {
+      "id": "tc-pub-p-49-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ],
+        [
+          3,
+          1,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-49-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    }
+  ],
+  "permutations-full-backtracking": [
+    {
+      "id": "tc-pub-p-49-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ],
+        [
+          3,
+          1,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-49-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    }
+  ],
+  "p-50": [
+    {
+      "id": "tc-pub-p-50-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-50-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          1,
+          2,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-50-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "single-number-xor-trick": [
+    {
+      "id": "tc-pub-p-50-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-50-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          1,
+          2,
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-50-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-51": [
+    {
+      "id": "tc-pub-p-51-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            7,
+            8,
+            9
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        6,
+        9,
+        8,
+        7,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "tc-pub-p-51-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          [
+            5,
+            6,
+            7,
+            8
+          ],
+          [
+            9,
+            10,
+            11,
+            12
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        4,
+        8,
+        12,
+        11,
+        10,
+        9,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "tc-pub-p-51-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1
+      ]
+    }
+  ],
+  "spiral-matrix": [
+    {
+      "id": "tc-pub-p-51-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            7,
+            8,
+            9
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        6,
+        9,
+        8,
+        7,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "tc-pub-p-51-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          [
+            5,
+            6,
+            7,
+            8
+          ],
+          [
+            9,
+            10,
+            11,
+            12
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        2,
+        3,
+        4,
+        8,
+        12,
+        11,
+        10,
+        9,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "tc-pub-p-51-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1
+      ]
+    }
+  ],
+  "p-52": [
+    {
+      "id": "tc-pub-p-52-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCCED"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-52-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "SEE"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-52-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCB"
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "word-search": [
+    {
+      "id": "tc-pub-p-52-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCCED"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-52-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "SEE"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-52-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCB"
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-53": [
+    {
+      "id": "tc-pub-p-53-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          2
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-53-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-53-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-53-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "house-robber-ii": [
+    {
+      "id": "tc-pub-p-53-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          2,
+          3,
+          2
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-53-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-53-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-53-4",
+      "position": 4,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-54": [
+    {
+      "id": "tc-pub-p-54-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          1,
+          4,
+          null,
+          2
+        ],
+        1
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-54-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          5,
+          3,
+          6,
+          2,
+          4,
+          null,
+          null,
+          1
+        ],
+        3
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-54-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          10,
+          5,
+          15
+        ],
+        2
+      ],
+      "expectedOutput": 10
+    }
+  ],
+  "kth-smallest-element-in-a-bst": [
+    {
+      "id": "tc-pub-p-54-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          1,
+          4,
+          null,
+          2
+        ],
+        1
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-54-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          5,
+          3,
+          6,
+          2,
+          4,
+          null,
+          null,
+          1
+        ],
+        3
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-54-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          10,
+          5,
+          15
+        ],
+        2
+      ],
+      "expectedOutput": 10
+    }
+  ],
+  "p-55": [
+    {
+      "id": "tc-pub-p-55-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8
+        ],
+        5,
+        1
+      ],
+      "expectedOutput": 3
+    },
+    {
+      "id": "tc-pub-p-55-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          3,
+          5,
+          1,
+          6,
+          2,
+          0,
+          8
+        ],
+        5,
+        4
+      ],
+      "expectedOutput": 5
+    },
+    {
+      "id": "tc-pub-p-55-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        1,
+        2
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-56": [
+    {
+      "id": "tc-pub-p-56-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2,
+            2,
+            3,
+            5
+          ],
+          [
+            3,
+            2,
+            3,
+            4,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            1
+          ],
+          [
+            6,
+            7,
+            1,
+            4,
+            5
+          ],
+          [
+            5,
+            1,
+            1,
+            2,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-56-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        [
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "p-57": [
+    {
+      "id": "tc-pub-p-57-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-57-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        4,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "tc-pub-p-57-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        1,
+        []
+      ],
+      "expectedOutput": [
+        0
+      ]
+    }
+  ],
+  "course-schedule-ii": [
+    {
+      "id": "tc-pub-p-57-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-57-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        4,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "tc-pub-p-57-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        1,
+        []
+      ],
+      "expectedOutput": [
+        0
+      ]
+    }
+  ],
+  "p-58": [
+    {
+      "id": "tc-pub-p-58-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            0,
+            30
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            15,
+            20
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-58-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            7,
+            10
+          ],
+          [
+            2,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-58-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            5
+          ],
+          [
+            5,
+            10
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "meeting-rooms-ii": [
+    {
+      "id": "tc-pub-p-58-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            0,
+            30
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            15,
+            20
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-58-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            7,
+            10
+          ],
+          [
+            2,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-58-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            5
+          ],
+          [
+            5,
+            10
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-59": [
+    {
+      "id": "tc-pub-p-59-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            1,
+            3
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-59-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-59-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ]
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "non-overlapping-intervals": [
+    {
+      "id": "tc-pub-p-59-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            1,
+            3
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-59-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-59-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ]
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-60": [
+    {
+      "id": "tc-pub-p-60-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ADOBECODEBANC",
+        "ABC"
+      ],
+      "expectedOutput": "BANC"
+    },
+    {
+      "id": "tc-pub-p-60-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "a",
+        "a"
+      ],
+      "expectedOutput": "a"
+    },
+    {
+      "id": "tc-pub-p-60-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "a",
+        "aa"
+      ],
+      "expectedOutput": ""
+    }
+  ],
+  "minimum-window-substring": [
+    {
+      "id": "tc-pub-p-60-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "ADOBECODEBANC",
+        "ABC"
+      ],
+      "expectedOutput": "BANC"
+    },
+    {
+      "id": "tc-pub-p-60-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "a",
+        "a"
+      ],
+      "expectedOutput": "a"
+    },
+    {
+      "id": "tc-pub-p-60-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "a",
+        "aa"
+      ],
+      "expectedOutput": ""
+    }
+  ],
+  "p-61": [
+    {
+      "id": "tc-pub-p-61-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          3,
+          2,
+          1,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-61-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          0,
+          3,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-61-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "trapping-rain-water": [
+    {
+      "id": "tc-pub-p-61-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          3,
+          2,
+          1,
+          2,
+          1
+        ]
+      ],
+      "expectedOutput": 6
+    },
+    {
+      "id": "tc-pub-p-61-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          2,
+          0,
+          3,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 9
+    },
+    {
+      "id": "tc-pub-p-61-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-62": [
+    {
+      "id": "tc-pub-p-62-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          3,
+          -1,
+          -3,
+          5,
+          3,
+          6,
+          7
+        ],
+        3
+      ],
+      "expectedOutput": [
+        3,
+        3,
+        5,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "tc-pub-p-62-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-62-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          -1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1,
+        -1
+      ]
+    }
+  ],
+  "sliding-window-maximum": [
+    {
+      "id": "tc-pub-p-62-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          3,
+          -1,
+          -3,
+          5,
+          3,
+          6,
+          7
+        ],
+        3
+      ],
+      "expectedOutput": [
+        3,
+        3,
+        5,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "tc-pub-p-62-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-62-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          -1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1,
+        -1
+      ]
+    }
+  ],
+  "p-63": [
+    {
+      "id": "tc-pub-p-63-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "leetcode",
+        [
+          "leet",
+          "code"
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-63-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "applepenapple",
+        [
+          "apple",
+          "pen"
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-63-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "catsandog",
+        [
+          "cats",
+          "dog",
+          "sand",
+          "and",
+          "cat"
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "word-break": [
+    {
+      "id": "tc-pub-p-63-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        "leetcode",
+        [
+          "leet",
+          "code"
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-63-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        "applepenapple",
+        [
+          "apple",
+          "pen"
+        ]
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-63-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        "catsandog",
+        [
+          "cats",
+          "dog",
+          "sand",
+          "and",
+          "cat"
+        ]
+      ],
+      "expectedOutput": false
+    }
+  ],
+  "p-64": [
+    {
+      "id": "tc-pub-p-64-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          1,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-64-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3,
+        [
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-64-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        10,
+        [
+          10
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "coin-change-ii": [
+    {
+      "id": "tc-pub-p-64-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          1,
+          2,
+          5
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-64-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        3,
+        [
+          2
+        ]
+      ],
+      "expectedOutput": 0
+    },
+    {
+      "id": "tc-pub-p-64-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        10,
+        [
+          10
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-65": [
+    {
+      "id": "tc-pub-p-65-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          10,
+          9,
+          2,
+          5,
+          3,
+          7,
+          101,
+          18
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-65-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          3,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-65-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "longest-increasing-subsequence": [
+    {
+      "id": "tc-pub-p-65-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          10,
+          9,
+          2,
+          5,
+          3,
+          7,
+          101,
+          18
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-65-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          1,
+          0,
+          3,
+          2,
+          3
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-65-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ]
+      ],
+      "expectedOutput": 1
+    }
+  ],
+  "p-66": [
+    {
+      "id": "tc-pub-p-66-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          2
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          2,
+          2
+        ],
+        [
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-66-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "subsets-ii": [
+    {
+      "id": "tc-pub-p-66-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2,
+          2
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          2,
+          2
+        ],
+        [
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "tc-pub-p-66-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          0
+        ]
+      ],
+      "expectedOutput": [
+        [],
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "p-67": [
+    {
+      "id": "tc-pub-p-67-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        2
+      ],
+      "expectedOutput": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "tc-pub-p-67-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1
+        ],
+        1
+      ],
+      "expectedOutput": [
+        1
+      ]
+    },
+    {
+      "id": "tc-pub-p-67-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          4,
+          4,
+          4,
+          6,
+          6,
+          7
+        ],
+        1
+      ],
+      "expectedOutput": [
+        4
+      ]
+    }
+  ],
+  "p-68": [
+    {
+      "id": "tc-pub-p-68-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          73,
+          74,
+          75,
+          71,
+          69,
+          72,
+          76,
+          73
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        4,
+        2,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-68-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          40,
+          50,
+          60
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-68-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          60,
+          90
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "daily-temperatures": [
+    {
+      "id": "tc-pub-p-68-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          73,
+          74,
+          75,
+          71,
+          69,
+          72,
+          76,
+          73
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        4,
+        2,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-68-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          40,
+          50,
+          60
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": "tc-pub-p-68-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          30,
+          60,
+          90
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "p-69": [
+    {
+      "id": "tc-pub-p-69-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-69-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-69-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            0,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "rotting-oranges": [
+    {
+      "id": "tc-pub-p-69-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": 4
+    },
+    {
+      "id": "tc-pub-p-69-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            1
+          ]
+        ]
+      ],
+      "expectedOutput": -1
+    },
+    {
+      "id": "tc-pub-p-69-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            0,
+            2
+          ]
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-70": [
+    {
+      "id": "tc-pub-p-70-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-70-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-70-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        4,
+        []
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "number-of-connected-components": [
+    {
+      "id": "tc-pub-p-70-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-70-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        5,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      "expectedOutput": 1
+    },
+    {
+      "id": "tc-pub-p-70-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        4,
+        []
+      ],
+      "expectedOutput": 4
+    }
+  ],
+  "p-71": [
+    {
+      "id": "tc-pub-p-71-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "apple"
+        ],
+        "apple"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-71-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "apple"
+        ],
+        "app"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-71-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "apple",
+          "app"
+        ],
+        "app"
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-72": [
+    {
+      "id": "tc-pub-p-72-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            4,
+            5
+          ],
+          [
+            1,
+            3,
+            4
+          ],
+          [
+            2,
+            6
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": "tc-pub-p-72-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-72-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          []
+        ]
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "merge-k-sorted-lists": [
+    {
+      "id": "tc-pub-p-72-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          [
+            1,
+            4,
+            5
+          ],
+          [
+            1,
+            3,
+            4
+          ],
+          [
+            2,
+            6
+          ]
+        ]
+      ],
+      "expectedOutput": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": "tc-pub-p-72-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        []
+      ],
+      "expectedOutput": []
+    },
+    {
+      "id": "tc-pub-p-72-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          []
+        ]
+      ],
+      "expectedOutput": []
+    }
+  ],
+  "p-73": [
+    {
+      "id": "tc-pub-p-73-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-73-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": 2.5
+    },
+    {
+      "id": "tc-pub-p-73-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "median-of-two-sorted-arrays": [
+    {
+      "id": "tc-pub-p-73-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ]
+      ],
+      "expectedOutput": 2
+    },
+    {
+      "id": "tc-pub-p-73-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "expectedOutput": 2.5
+    },
+    {
+      "id": "tc-pub-p-73-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "expectedOutput": 0
+    }
+  ],
+  "p-74": [
+    {
+      "id": "tc-pub-p-74-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        "pad"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-74-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        ".ad"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-74-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        "b.."
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "design-add-and-search-words-data-structure": [
+    {
+      "id": "tc-pub-p-74-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        "pad"
+      ],
+      "expectedOutput": false
+    },
+    {
+      "id": "tc-pub-p-74-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        ".ad"
+      ],
+      "expectedOutput": true
+    },
+    {
+      "id": "tc-pub-p-74-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "bad",
+          "dad",
+          "mad"
+        ],
+        "b.."
+      ],
+      "expectedOutput": true
+    }
+  ],
+  "p-75": [
+    {
+      "id": "tc-pub-p-75-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "wrt",
+          "wrf",
+          "er",
+          "ett",
+          "rftt"
+        ]
+      ],
+      "expectedOutput": "wertf"
+    },
+    {
+      "id": "tc-pub-p-75-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "z",
+          "x"
+        ]
+      ],
+      "expectedOutput": "zx"
+    },
+    {
+      "id": "tc-pub-p-75-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "z",
+          "x",
+          "z"
+        ]
+      ],
+      "expectedOutput": ""
+    }
+  ],
+  "alien-dictionary": [
+    {
+      "id": "tc-pub-p-75-1",
+      "position": 1,
+      "isPublic": true,
+      "input": [
+        [
+          "wrt",
+          "wrf",
+          "er",
+          "ett",
+          "rftt"
+        ]
+      ],
+      "expectedOutput": "wertf"
+    },
+    {
+      "id": "tc-pub-p-75-2",
+      "position": 2,
+      "isPublic": true,
+      "input": [
+        [
+          "z",
+          "x"
+        ]
+      ],
+      "expectedOutput": "zx"
+    },
+    {
+      "id": "tc-pub-p-75-3",
+      "position": 3,
+      "isPublic": true,
+      "input": [
+        [
+          "z",
+          "x",
+          "z"
+        ]
+      ],
+      "expectedOutput": ""
+    }
+  ]
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error_message: 'Method not allowed' });
   }
 
   try {
-    const { problem_id = 'two-sum', language = 'javascript', code = '' } = req.body || {};
-    const testCases = BUILTIN_TEST_CASES[problem_id] || BUILTIN_TEST_CASES['p-1'];
+    const { problem_id = '', language = 'javascript', code = '' } = req.body || {};
+    const cleanId = String(problem_id).toLowerCase().trim();
+    const testCases = PUBLIC_TEST_CASES[cleanId];
+
+    if (!testCases || testCases.length === 0) {
+      return res.status(404).json({
+        success: false,
+        status: 'SYSTEM_ERROR',
+        runtime_ms: 0,
+        memory_kb: 0,
+        total_test_cases: 0,
+        passed_test_cases: 0,
+        test_results: [],
+        error_message: 'No test cases found for problem ID: ' + problem_id + '. Zero cross-problem fallbacks permitted.'
+      });
+    }
+
     const result = executeCodeSandbox(code, language, testCases);
     return res.status(200).json({
       success: true,
